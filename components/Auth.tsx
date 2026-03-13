@@ -1,0 +1,285 @@
+
+import React, { useState, useRef } from 'react';
+import { Role, AppState, User } from '../types';
+import { Phone, Lock, User as UserIcon, Crown, ChevronDown, Globe, Eye, EyeOff, Smartphone, AlertTriangle } from 'lucide-react';
+import { t, Language } from '../translations';
+import { authService } from '../api';
+
+interface AuthProps {
+  state: AppState;
+  setState: React.Dispatch<React.SetStateAction<AppState>>;
+  language: Language;
+  setLanguage: (lang: Language) => void;
+}
+
+const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) => {
+  const [isLogin, setIsLogin] = useState(true);
+  const [openDropdown, setOpenDropdown] = useState<'role' | null>(null);
+  const [showPassword, setShowPassword] = useState(false);
+  const [authForm, setAuthForm] = useState({
+    firstName: '',
+    lastName: '',
+    nickname: '',
+    phone: '+998',
+    password: '',
+    role: Role.OPERATOR
+  });
+  const [error, setError] = useState('');
+  const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
+
+  const formatPhoneNumber = (value: string) => {
+    if (!value) return '+998';
+    let phoneNumber = value.replace(/[^\d]/g, '');
+    if (!phoneNumber.startsWith('998')) {
+        phoneNumber = '998' + phoneNumber;
+    }
+    const phoneNumberLength = phoneNumber.length;
+    if (phoneNumberLength <= 3) return `+${phoneNumber}`;
+    if (phoneNumberLength <= 5) return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3)}`;
+    if (phoneNumberLength <= 8) return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5)}`;
+    if (phoneNumberLength <= 10) return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5, 8)} ${phoneNumber.slice(8)}`;
+    return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5, 8)} ${phoneNumber.slice(8, 10)} ${phoneNumber.slice(10, 12)}`;
+  };
+
+  const nameRegex = /^[A-Z][a-z]*$/;
+
+  const validateForm = () => {
+    const errors: Record<string, boolean> = {};
+    let firstErrorMsg = '';
+
+    if (isLogin) {
+      if (!authForm.nickname || authForm.nickname.length < 6) {
+        errors.nickname = true;
+        firstErrorMsg = firstErrorMsg || "Login kamida 6 ta belgidan iborat bo'lishi kerak";
+      }
+      if (!authForm.password || authForm.password.length < 6) {
+        errors.password = true;
+        firstErrorMsg = firstErrorMsg || "Parol kamida 6 ta belgidan iborat bo'lishi kerak";
+      }
+    } else {
+      if (!authForm.firstName || !nameRegex.test(authForm.firstName)) {
+        errors.firstName = true;
+        firstErrorMsg = firstErrorMsg || "Ism katta harf bilan boshlanishi va faqat harflardan iborat bo'lishi kerak";
+      }
+      if (!authForm.lastName || !nameRegex.test(authForm.lastName)) {
+        errors.lastName = true;
+        firstErrorMsg = firstErrorMsg || "Familiya katta harf bilan boshlanishi va faqat harflardan iborat bo'lishi kerak";
+      }
+      if (!authForm.nickname || authForm.nickname.length < 6) {
+        errors.nickname = true;
+        firstErrorMsg = firstErrorMsg || "Nickname kamida 6 ta belgidan iborat bo'lishi kerak";
+      }
+      if (!authForm.password || authForm.password.length < 6) {
+        errors.password = true;
+        firstErrorMsg = firstErrorMsg || "Parol kamida 6 ta belgidan iborat bo'lishi kerak";
+      }
+      if (authForm.phone.replace(/[^\d]/g, '').length !== 12) {
+        errors.phone = true;
+        firstErrorMsg = firstErrorMsg || "Telefon raqami noto'g'ri kiritilgan";
+      }
+    }
+
+    setFieldErrors(errors);
+    if (firstErrorMsg) setError(firstErrorMsg);
+    return Object.keys(errors).length === 0;
+  };
+
+  const handleAuth = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!validateForm()) return;
+    setError('');
+
+    try {
+      if (isLogin) {
+        const loginRes = await authService.login({
+          phone: authForm.nickname, // Backend now accepts nickname in phone field
+          password: authForm.password
+        });
+        localStorage.setItem('paynet_auth_token', loginRes.data.access);
+        const userRes = await authService.getMe();
+        setState(prev => ({ ...prev, currentUser: userRes.data }));
+      } else {
+        const signupRes = await authService.register({
+          phone: authForm.phone.replace(/[^\d]/g, ''),
+          nickname: authForm.nickname,
+          password: authForm.password,
+          first_name: authForm.firstName,
+          last_name: authForm.lastName,
+          role: authForm.role
+        });
+        setError("Ro'yxatdan o'tish muvaffaqiyatli! Endi login orqali kiring.");
+        setIsLogin(true);
+      }
+    } catch (err: any) {
+      console.error("Auth error", err);
+      setError(err.response?.data?.detail || err.response?.data?.phone?.[0] || t(language, 'auth_error'));
+    }
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center bg-brand-black p-4 relative overflow-hidden">
+      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none">
+        <div className="absolute -top-24 -left-24 w-96 h-96 bg-brand-gold/10 rounded-full blur-3xl"></div>
+        <div className="absolute -bottom-24 -right-24 w-96 h-96 bg-brand-gold/5 rounded-full blur-3xl"></div>
+      </div>
+
+      <div className="absolute top-6 right-6 z-20">
+        <div className="relative group">
+          <button className="flex items-center gap-2 px-4 py-2 bg-brand-dark/40 backdrop-blur-md border border-white/10 rounded-xl text-white/60 hover:text-brand-gold transition-all">
+            <Globe className="w-4 h-4" />
+            <span className="text-[10px] font-black uppercase tracking-widest">{t(language, language === 'uz' ? 'uzbek' : language === 'ru' ? 'russian' : 'english')}</span>
+          </button>
+          <div className="absolute right-0 top-full mt-2 w-32 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
+            <button type="button" onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'uzbek')}</button>
+            <button type="button" onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'russian')}</button>
+            <button type="button" onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'english')}</button>
+          </div>
+        </div>
+      </div>
+
+      <div className={`theme-blue-box bg-brand-dark/40 backdrop-blur-xl p-6 sm:p-10 rounded-[2.5rem] border border-white/10 shadow-2xl w-full max-w-md relative z-10 transition-all duration-300 ${fieldErrors.password && !isLogin ? 'animate-shake' : ''}`}>
+        <div className="text-center mb-8">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-brand-black border-2 border-brand-gold/30 rounded-3xl mb-4 shadow-2xl shadow-brand-gold/10">
+            <Crown className="w-10 h-10 text-brand-gold" />
+          </div>
+          <h1 className="text-4xl font-black gold-text-gradient mb-1 uppercase tracking-tighter">{t(language, 'brand_name')}</h1>
+          <p className="text-brand-gold/60 text-[10px] font-black uppercase tracking-[0.3em] mb-4">{t(language, 'brand_subtitle')}</p>
+          <div className="h-px w-12 bg-brand-gold/30 mx-auto"></div>
+          <p className="text-white/40 text-xs font-medium mt-4">{isLogin ? t(language, 'login_title') : t(language, 'signup_title')}</p>
+        </div>
+
+        <form onSubmit={handleAuth} className="space-y-5">
+          {error && (
+            <div className="bg-red-500/10 text-red-500 p-4 rounded-2xl text-xs font-bold border border-red-500/20 flex items-center gap-3">
+              <AlertTriangle className="w-4 h-4 shrink-0" />
+              {error}
+            </div>
+          )}
+
+          <div className="space-y-4">
+            {!isLogin && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    className={`peer w-full px-5 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder-transparent focus:outline-none transition-all ${fieldErrors.firstName ? 'border-red-500' : 'border-white/10 focus:border-brand-gold'}`}
+                    value={authForm.firstName}
+                    placeholder="Ism"
+                    onChange={e => {
+                        const val = e.target.value;
+                        const formatted = val ? val.charAt(0).toUpperCase() + val.slice(1).toLowerCase() : '';
+                        setAuthForm({ ...authForm, firstName: formatted });
+                    }}
+                  />
+                  <label className="absolute left-5 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-[10px] peer-focus:text-brand-gold">Ism</label>
+                </div>
+                <div className="relative">
+                  <input
+                    type="text"
+                    required
+                    className={`peer w-full px-5 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder-transparent focus:outline-none transition-all ${fieldErrors.lastName ? 'border-red-500' : 'border-white/10 focus:border-brand-gold'}`}
+                    value={authForm.lastName}
+                    placeholder="Familiya"
+                    onChange={e => {
+                        const val = e.target.value;
+                        const formatted = val ? val.charAt(0).toUpperCase() + val.slice(1).toLowerCase() : '';
+                        setAuthForm({ ...authForm, lastName: formatted });
+                    }}
+                  />
+                  <label className="absolute left-5 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-[10px] peer-focus:text-brand-gold">Familiya</label>
+                </div>
+              </div>
+            )}
+
+            <div className="relative group">
+              <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-brand-gold w-5 h-5 transition-colors" />
+              <input
+                type="text"
+                placeholder={isLogin ? t(language, 'login_nickname_label') : t(language, 'nickname')}
+                required
+                className={`w-full pl-12 pr-4 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder:text-white/20 focus:outline-none transition-all ${fieldErrors.nickname ? 'border-red-500 bg-red-500/5' : 'border-white/10 focus:border-brand-gold'}`}
+                value={authForm.nickname}
+                onChange={e => setAuthForm({ ...authForm, nickname: e.target.value })}
+              />
+            </div>
+
+            {!isLogin && (
+              <div className="relative group">
+                <div className="absolute left-4 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <Smartphone className="text-white/20 group-focus-within:text-brand-gold w-5 h-5" />
+                </div>
+                <input
+                  type="tel"
+                  placeholder={t(language, 'phone_number')}
+                  required
+                  className={`w-full pl-12 pr-4 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder:text-white/20 focus:outline-none transition-all ${fieldErrors.phone ? 'border-red-500 bg-red-500/5' : 'border-white/10 focus:border-brand-gold'}`}
+                  value={authForm.phone}
+                  onChange={e => setAuthForm({ ...authForm, phone: formatPhoneNumber(e.target.value) })}
+                />
+                <label className="absolute left-10 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest">Telefon raqam</label>
+              </div>
+            )}
+
+            <div className="relative group">
+              <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-brand-gold w-5 h-5 transition-colors" />
+              <input
+                type={showPassword ? "text" : "password"}
+                placeholder={t(language, 'password')}
+                required
+                className={`w-full pl-12 pr-12 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder:text-white/20 focus:outline-none transition-all ${((!isLogin && authForm.password.length > 0 && authForm.password.length < 6) || fieldErrors.password) ? 'border-red-500 bg-red-500/5' : 'border-white/10 focus:border-brand-gold'}`}
+                value={authForm.password}
+                onChange={e => setAuthForm({ ...authForm, password: e.target.value })}
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-4 top-1/2 -translate-y-1/2 text-white/20 hover:text-white transition-colors"
+              >
+                {showPassword ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+              </button>
+            </div>
+
+            {!isLogin && (
+              <div className="space-y-2">
+                <label className="text-[10px] font-black text-white/20 uppercase tracking-widest block mb-1 ml-1">{t(language, 'role_label')}</label>
+                <div className="relative">
+                  <button
+                    type="button"
+                    className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-sm font-black text-white/40 text-left flex items-center justify-between cursor-not-allowed"
+                  >
+                    <span>{t(language, 'operator')}</span>
+                  </button>
+                  <p className="text-[9px] font-bold text-white/20 pl-2 mt-1 italic">Hozirda faqat operator sifatida ro'yxatdan o'tish mumkin</p>
+                </div>
+              </div>
+            )}
+          </div>
+
+          <button
+            type="submit"
+            disabled={!isLogin && authForm.password.length > 0 && authForm.password.length < 6}
+            className={`w-full py-5 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-[0.2em] text-xs shadow-2xl transition-all mt-4 disabled:opacity-50 disabled:grayscale disabled:cursor-not-allowed ${!isLogin && authForm.password.length > 0 && authForm.password.length < 6 ? '' : 'hover:scale-[1.02] active:scale-95 shadow-brand-gold/20'}`}
+          >
+            {isLogin ? t(language, 'login_button') : t(language, 'signup_button')}
+          </button>
+        </form>
+
+        <div className="mt-10 text-center">
+          <button
+            onClick={() => {
+              setIsLogin(!isLogin);
+              setError('');
+              setFieldErrors({});
+            }}
+            className="text-white/40 hover:text-brand-gold text-xs font-bold transition-colors uppercase tracking-widest"
+          >
+            {isLogin ? t(language, 'no_account') : t(language, 'have_account')}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default Auth;

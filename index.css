@@ -1,0 +1,173 @@
+@import "tailwindcss";
+
+@theme {
+  --color-brand-gold: var(--theme-gold);
+  --color-brand-black: var(--theme-black);
+  --color-brand-dark: var(--theme-dark);
+  --color-brand-gold-light: var(--theme-gold-light);
+  --color-brand-gold-dark: var(--theme-gold-dark);
+}
+
+:root {
+  /* Light mode defaults */
+  --theme-gold: #2563eb; /* blue-600 */
+  --theme-black: #f9fafb; /* gray-50 */
+  --theme-dark: #ffffff; /* white */
+  --theme-gold-light: #60a5fa; /* blue-400 */
+  --theme-gold-dark: #1d4ed8; /* blue-700 */
+}
+
+.dark {
+  /* Dark mode overrides */
+  --theme-gold: #D4AF37;
+  --theme-black: #0A0A0A;
+  --theme-dark: #1A1A1A;
+  --theme-gold-light: #F2D06B;
+  --theme-gold-dark: #997A1F;
+}
+
+body {
+  @apply bg-brand-black text-gray-900 antialiased;
+}
+
+.dark body {
+  @apply text-white;
+}
+
+/* Specific component fixes */
+input, textarea, select {
+  @apply bg-white border-gray-200 text-gray-900 placeholder:text-gray-400;
+}
+
+input:focus, textarea:focus, select:focus {
+  @apply border-brand-gold ring-brand-gold/20;
+}
+
+.dark input, .dark textarea, .dark select {
+  @apply bg-white/5 border-white/10 text-white placeholder:text-white/20;
+}
+
+.dark input:focus, .dark textarea:focus, .dark select:focus {
+  @apply border-brand-gold/50 ring-brand-gold/10;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.custom-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
+  border-radius: 20px;
+}
+
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+html:not(.dark) .custom-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 0, 0, 0.1);
+}
+
+/* Custom styles for the brand */
+.glass-card {
+  @apply bg-brand-dark/50 backdrop-blur-md border border-gray-200;
+}
+
+.dark .glass-card {
+  @apply border-white/10;
+}
+
+.gold-gradient {
+  @apply bg-gradient-to-br from-brand-gold-light via-brand-gold to-brand-gold-dark;
+}
+
+.gold-text-gradient {
+  @apply bg-gradient-to-br from-brand-gold-light via-brand-gold to-brand-gold-dark bg-clip-text text-transparent;
+}
+
+/* Light Mode Overrides for hardcoded text-white and border-white */
+html:not(.dark) .text-white:not(.keep-white) { color: #111827 !important; }
+html:not(.dark) .text-white\/80:not(.keep-white) { color: rgba(17, 24, 39, 0.8) !important; }
+html:not(.dark) .text-white\/70:not(.keep-white) { color: rgba(17, 24, 39, 0.7) !important; }
+html:not(.dark) .text-white\/60:not(.keep-white) { color: rgba(17, 24, 39, 0.6) !important; }
+html:not(.dark) .text-white\/50:not(.keep-white) { color: rgba(17, 24, 39, 0.5) !important; }
+html:not(.dark) .text-white\/40:not(.keep-white) { color: rgba(17, 24, 39, 0.6) !important; }
+html:not(.dark) .text-white\/30:not(.keep-white) { color: rgba(17, 24, 39, 0.5) !important; }
+html:not(.dark) .text-white\/20:not(.keep-white),
+html:not(.dark) .placeholder\:text-white\/20::placeholder { color: rgba(17, 24, 39, 0.4) !important; }
+html:not(.dark) .text-white\/10:not(.keep-white) { color: rgba(17, 24, 39, 0.2) !important; }
+
+html:not(.dark) .keep-white { color: #ffffff !important; }
+
+html:not(.dark) .border-white\/20 { border-color: #d1d5db !important; }
+html:not(.dark) .border-white\/10 { border-color: #e5e7eb !important; }
+html:not(.dark) .border-white\/5 { border-color: #f3f4f6 !important; }
+
+html:not(.dark) .bg-white\/20 { background-color: #e5e7eb !important; }
+html:not(.dark) .bg-white\/10 { background-color: #f3f4f6 !important; }
+html:not(.dark) .bg-white\/5 { background-color: #ffffff !important; }
+
+/* Fix for buttons that use text-brand-black (which is #f9fafb in light mode) */
+html:not(.dark) .text-brand-black { color: #ffffff !important; }
+
+/* Blue Box Theme for Light Mode (Header, Login, etc) */
+html:not(.dark) .theme-blue-box {
+  background-color: #ffffff !important;
+  color: #111827 !important;
+}
+
+html:not(.dark) .theme-blue-box .text-white,
+html:not(.dark) .theme-blue-box .text-gray-900 {
+  color: #111827 !important;
+}
+
+html:not(.dark) .theme-blue-box .text-white\/80 { color: rgba(17, 24, 39, 0.8) !important; }
+html:not(.dark) .theme-blue-box .text-white\/70 { color: rgba(17, 24, 39, 0.7) !important; }
+html:not(.dark) .theme-blue-box .text-white\/60 { color: rgba(17, 24, 39, 0.6) !important; }
+html:not(.dark) .theme-blue-box .text-white\/50 { color: rgba(17, 24, 39, 0.5) !important; }
+html:not(.dark) .theme-blue-box .text-white\/40 { color: rgba(17, 24, 39, 0.4) !important; }
+html:not(.dark) .theme-blue-box .text-white\/30 { color: rgba(17, 24, 39, 0.3) !important; }
+html:not(.dark) .theme-blue-box .text-white\/20,
+html:not(.dark) .theme-blue-box .placeholder\:text-white\/20::placeholder { color: rgba(17, 24, 39, 0.4) !important; }
+html:not(.dark) .theme-blue-box .text-white\/10 { color: rgba(17, 24, 39, 0.1) !important; }
+
+html:not(.dark) .theme-blue-box .bg-white\/20 { background-color: rgba(17, 24, 39, 0.1) !important; }
+html:not(.dark) .theme-blue-box .bg-white\/10 { background-color: rgba(17, 24, 39, 0.05) !important; }
+html:not(.dark) .theme-blue-box .bg-white\/5 { background-color: rgba(17, 24, 39, 0.02) !important; }
+
+html:not(.dark) .theme-blue-box .border-white\/20 { border-color: rgba(17, 24, 39, 0.1) !important; }
+html:not(.dark) .theme-blue-box .border-white\/10 { border-color: rgba(17, 24, 39, 0.05) !important; }
+html:not(.dark) .theme-blue-box .border-white\/5 { border-color: rgba(17, 24, 39, 0.02) !important; }
+
+html:not(.dark) .theme-blue-box .bg-brand-black { background-color: #f9fafb !important; }
+html:not(.dark) .theme-blue-box .bg-brand-dark { background-color: #ffffff !important; }
+
+/* Flip Card Utilities */
+.perspective-1000 {
+  perspective: 1000px;
+  -webkit-perspective: 1000px;
+}
+.transform-style-3d {
+  transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
+}
+.backface-hidden {
+  backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
+}
+.rotate-y-180 {
+  transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
+}

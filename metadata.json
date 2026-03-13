@@ -1,0 +1,8 @@
+{
+  "name": "Sam Brend Nomer - Paynet Management Platform",
+  "description": "A comprehensive management platform for Paynet operators and managers, featuring sales tracking, inventory management, and performance monitoring.",
+  "requestFramePermissions": [
+    "camera",
+    "geolocation"
+  ]
+}
