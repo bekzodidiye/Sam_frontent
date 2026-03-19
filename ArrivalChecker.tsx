@@ -11,7 +11,7 @@ import { getTodayStr, isDateMatch } from './utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Crown, Sun, Moon, Globe, Hash, RotateCcw, X, ChevronRight, ChevronLeft } from 'lucide-react';
 import { t, Language } from './translations';
-import { authService, userService, checkInService, saleService, messageService, ruleService, targetService, reportService, linkService } from './api';
+import { authService, userService, checkInService, saleService, messageService, ruleService, targetService, reportService, linkService, settingsService, operatorRatingService } from './api';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useWebSocket } from './hooks/useWebSocket';
 
@@ -19,6 +19,7 @@ import { useWebSocket } from './hooks/useWebSocket';
 const RT_EVENTS = [
   'NEW_MESSAGE', 'NEW_CHECKIN', 'NEW_SALE', 'NEW_REPORT',
   'USER_UPDATED', 'RULE_UPDATED', 'TARGET_UPDATED', 'TARIFF_UPDATED', 'LINK_UPDATED',
+  'SETTINGS_UPDATED', 'NEW_RATING',
   'USER_ACTIVITY'
 ];
 
@@ -42,7 +43,9 @@ const ArrivalChecker: React.FC = () => {
       { id: '3', name: 'Beeline', url: 'https://beeline.uz', image: '', createdAt: new Date().toISOString() },
       { id: '4', name: 'Uztelecom', url: 'https://uztelecom.uz', image: '', createdAt: new Date().toISOString() },
       { id: '5', name: 'Paynet', url: 'https://paynet.uz', image: '', createdAt: new Date().toISOString() },
-    ]
+    ],
+    globalSettings: null,
+    operatorRatings: []
   });
 
   const [isLoading, setIsLoading] = useState(true);
@@ -61,6 +64,8 @@ const ArrivalChecker: React.FC = () => {
         const reportsRes = await reportService.getReports();
         const linksRes = await linkService.getSalesLinks();
         const tariffsRes = await ruleService.getTariffs();
+        const settingsRes = await settingsService.getSettings();
+        const ratingsRes = await operatorRatingService.getRatings();
 
         const mappedTariffs = tariffsRes.data.reduce((acc: any, t: any) => {
           if (!acc[t.company]) acc[t.company] = [];
@@ -79,7 +84,9 @@ const ArrivalChecker: React.FC = () => {
           monthlyTargets: targetsRes.data,
           reports: reportsRes.data,
           salesLinks: Array.isArray(linksRes.data) ? linksRes.data : [],
-          tariffs: mappedTariffs
+          tariffs: mappedTariffs,
+          globalSettings: settingsRes.data,
+          operatorRatings: Array.isArray(ratingsRes.data) ? ratingsRes.data : []
         }));
       } catch (error) {
         console.error("Failed to fetch data", error);
@@ -695,7 +702,7 @@ const ArrivalChecker: React.FC = () => {
                             { id: 'simcards', path: '/operator/inventory', label: t(language, 'inventory'), icon: '📱', count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
                             { id: 'monitoring', path: '/operator/monitoring', label: t(language, 'monitoring'), icon: '📈' },
                             { id: 'rating', path: '/operator/rating', label: t(language, 'rating'), icon: '🏆' },
-                            { id: 'messages', path: '/operator/messages', label: t(language, 'messages'), icon: '💬', count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
+                            { id: 'messages', path: '/operator/messages', label: t(language, 'messages'), icon: '💬' },
                             { id: 'rules', path: '/operator/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
                             { id: 'sales_panel', path: '/operator/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
                             { id: 'profile', path: '/operator/profile', label: t(language, 'profile'), icon: '👤' }
@@ -821,7 +828,8 @@ const ArrivalChecker: React.FC = () => {
                       { id: 'messages', path: '/manager/messages', label: t(language, 'messages'), icon: '💬', count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
                       { id: 'sales_panel', path: '/manager/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
                       { id: 'rules', path: '/manager/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
-                      { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: state.users.filter(u => !u.isApproved).length > 0 ? state.users.filter(u => !u.isApproved).length : undefined }
+                      { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: state.users.filter(u => !u.isApproved).length > 0 ? state.users.filter(u => !u.isApproved).length : undefined },
+                      { id: 'settings', path: '/manager/settings', label: t(language, 'settings'), icon: '⚙️' }
                     ].map(tab => (
                       <button
                         key={tab.id}
@@ -835,9 +843,9 @@ const ArrivalChecker: React.FC = () => {
                           }`}
                         title={isSidebarCollapsed ? tab.label : ''}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">{tab.icon}</span>
-                          {!isSidebarCollapsed && <span className="animate-in fade-in duration-300">{tab.label}</span>}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-lg shrink-0">{tab.icon}</span>
+                          {!isSidebarCollapsed && <span className="animate-in fade-in duration-300 truncate">{tab.label}</span>}
                         </div>
                         {!isSidebarCollapsed && tab.count ? (
                           <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.count}</span>
@@ -853,7 +861,7 @@ const ArrivalChecker: React.FC = () => {
                       { id: 'simcards', path: '/operator/inventory', label: t(language, 'inventory'), icon: '📱', count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
                       { id: 'monitoring', path: '/operator/monitoring', label: t(language, 'monitoring'), icon: '📈' },
                       { id: 'rating', path: '/operator/rating', label: t(language, 'rating'), icon: '🏆' },
-                      { id: 'messages', path: '/operator/messages', label: t(language, 'messages'), icon: '💬', count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
+                      { id: 'messages', path: '/operator/messages', label: t(language, 'messages'), icon: '💬' },
                       { id: 'rules', path: '/operator/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
                       { id: 'sales_panel', path: '/operator/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
                       { id: 'profile', path: '/operator/profile', label: t(language, 'profile'), icon: '👤' }
@@ -870,9 +878,9 @@ const ArrivalChecker: React.FC = () => {
                           }`}
                         title={isSidebarCollapsed ? tab.label : ''}
                       >
-                        <div className="flex items-center gap-3">
-                          <span className="text-lg">{tab.icon}</span>
-                          {!isSidebarCollapsed && <span className="animate-in fade-in duration-300">{tab.label}</span>}
+                        <div className="flex items-center gap-3 min-w-0">
+                          <span className="text-lg shrink-0">{tab.icon}</span>
+                          {!isSidebarCollapsed && <span className="animate-in fade-in duration-300 truncate">{tab.label}</span>}
                         </div>
                         {!isSidebarCollapsed && tab.count ? (
                           <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.count}</span>
@@ -1041,6 +1049,7 @@ const ArrivalChecker: React.FC = () => {
                     addMessage: (text: string) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: `${state.currentUser!.firstName} ${state.currentUser!.lastName}`, recipientId: 'manager', text, timestamp: new Date().toISOString(), isRead: false }] })),
                     markMessageAsRead: (msgId: string) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) })),
                     refreshData: fetchData,
+                    isDarkMode,
                     language
                   };
 
@@ -1059,6 +1068,7 @@ const ArrivalChecker: React.FC = () => {
                           <Route path="/manager/sales" element={<ManagerPanel {...managerProps} activeTab="sales_panel" />} />
                           <Route path="/manager/rules" element={<><ManagerPanel {...managerProps} activeTab="rules" /><RulesPanel state={state} setState={setState} language={language} /></>} />
                           <Route path="/manager/approvals" element={<ManagerPanel {...managerProps} activeTab="approvals" />} />
+                          <Route path="/manager/settings" element={<ManagerPanel {...managerProps} activeTab="settings" />} />
                         </>
                       ) : (
                         <>

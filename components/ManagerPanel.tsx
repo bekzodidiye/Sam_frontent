@@ -28,7 +28,10 @@ import {
   Check,
   Send,
   Trash2,
-  Globe
+  Globe,
+  Star,
+  Eye,
+  EyeOff
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Legend, LabelList, Cell } from 'recharts';
 import * as L from 'leaflet';
@@ -36,7 +39,7 @@ import { getTodayStr, isDateMatch, getLatenessStatus, getEarlyDepartureStatus, g
 import MapPicker from './MapPicker';
 import StaffMap from './StaffMap';
 import { t, Language, translations } from '../translations';
-import { userService, checkInService, saleService, messageService, targetService, ruleService, linkService } from '../api';
+import { userService, checkInService, saleService, messageService, targetService, ruleService, linkService, settingsService, operatorRatingService } from '../api';
 
 interface ManagerPanelProps {
   state: AppState;
@@ -45,8 +48,8 @@ interface ManagerPanelProps {
   language: 'uz' | 'ru' | 'en';
   calculateAchievements: (force?: boolean) => void;
   refreshData: () => Promise<void>;
-  activeTab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating' | 'sales_panel';
-  setActiveTab: (tab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating' | 'sales_panel') => void;
+  activeTab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating' | 'sales_panel' | 'settings';
+  setActiveTab: (tab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating' | 'sales_panel' | 'settings') => void;
 }
 
 
@@ -247,8 +250,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
   const [isTimeDropdownOpen, setIsTimeDropdownOpen] = useState(false);
   const [tempStartTime, setTempStartTime] = useState('');
   const [tempEndTime, setTempEndTime] = useState('');
+  const [showPasswords, setShowPasswords] = useState<Record<string, boolean>>({});
   const [searchTerm, setSearchTerm] = useState('');
-  const [ratingTimeframe, setRatingTimeframe] = useState<'today' | 'week' | 'month' | 'custom'>('month');
+  const [ratingTimeframe, setRatingTimeframe] = useState<'today' | 'week' | 'month' | 'custom'>('today');
+  const [isRatingTimeframeDropdownOpen, setIsRatingTimeframeDropdownOpen] = useState(false);
   const [ratingMonthOffset, setRatingMonthOffset] = useState(0);
   const [ratingCustomStart, setRatingCustomStart] = useState(getTodayStr());
   const [ratingCustomEnd, setRatingCustomEnd] = useState(getTodayStr());
@@ -281,8 +286,18 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
   const [isLeagueDeleteConfirmOpen, setIsLeagueDeleteConfirmOpen] = useState(false);
   const [leagueUserToDelete, setLeagueUserToDelete] = useState<User | null>(null);
 
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 5;
+  const [simPage, setSimPage] = useState(1);
+  const simPerPage = 6;
+  const [leaderboardPage, setLeaderboardPage] = useState(1);
+  const leaderboardPerPage = 5;
+  const [approvalsPage, setApprovalsPage] = useState(1);
+  const approvalsPerPage = 12;
+  const [monitoringOperatorsPage, setMonitoringOperatorsPage] = useState(1);
+  const monitoringOperatorsPerPage = 9;
+  const [staffPage, setStaffPage] = useState(1);
+  const staffPerPage = 12;
+  const [reportsPage, setReportsPage] = useState(1);
+  const reportsPerPage = 9;
 
   const [targetMonth, setTargetMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -341,6 +356,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordFormUserId, setPasswordFormUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
+
+  // Operator Rating State
+  const [ratingStars, setRatingStars] = useState(0); // hover state
+  const [ratingSelectedStars, setRatingSelectedStars] = useState(0);
+  const [ratingComment, setRatingComment] = useState('');
+  const [isSubmittingRating, setIsSubmittingRating] = useState(false);
 
   const handlePasswordChange = async () => {
     if (!passwordFormUserId || !newPassword.trim()) return;
@@ -795,76 +816,22 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               </button>
             </div>
 
-            <div className="p-6 sm:p-8 space-y-4 sm:space-y-6">
-              <div className="relative">
-                <label className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">Qabul qiluvchi</label>
-                <div
-                  onClick={() => setIsRecipientDropdownOpen(!isRecipientDropdownOpen)}
-                  className="w-full p-3.5 sm:p-4 bg-brand-black border border-white/10 rounded-xl sm:rounded-2xl text-sm font-bold text-white focus:border-brand-gold outline-none transition shadow-inner flex items-center justify-between cursor-pointer"
-                >
-                  <span className="truncate">
-                    {messageRecipientId === 'all'
-                      ? 'Barchaga (Hamma xodimlar)'
-                      : operators.find(op => op.id === messageRecipientId)?.firstName + ' ' + operators.find(op => op.id === messageRecipientId)?.lastName}
-                  </span>
-                  <ChevronDown className={`w-4 h-4 text-white/40 transition-transform shrink-0 ${isRecipientDropdownOpen ? 'rotate-180' : ''}`} />
-                </div>
-
-                {isRecipientDropdownOpen && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-brand-dark border border-white/10 rounded-2xl shadow-2xl z-[160] overflow-hidden animate-in slide-in-from-top-2 duration-200">
-                    <div className="max-h-60 overflow-y-auto no-scrollbar">
-                      <div
-                        onClick={() => {
-                          setMessageRecipientId('all');
-                          setIsRecipientDropdownOpen(false);
-                        }}
-                        className={`p-4 text-sm font-bold cursor-pointer transition-colors ${messageRecipientId === 'all' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5'}`}
-                      >
-                        Barchaga (Hamma xodimlar)
-                      </div>
-                      {operators.map(op => (
-                        <div
-                          key={op.id}
-                          onClick={() => {
-                            setMessageRecipientId(op.id);
-                            setIsRecipientDropdownOpen(false);
-                          }}
-                          className={`p-4 text-sm font-bold cursor-pointer transition-colors border-t border-white/5 ${messageRecipientId === op.id ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5'}`}
-                        >
-                          <div className="flex items-center justify-between">
-                            <span>{op.firstName} {op.lastName}</span>
-                            <span className="text-[8px] font-black uppercase tracking-widest text-white/30">{op.role.replace('_', ' ')}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+            <div className="p-12 flex flex-col items-center justify-center text-center space-y-6">
+              <div className="w-20 h-20 bg-brand-gold/10 rounded-3xl flex items-center justify-center text-brand-gold border border-brand-gold/20 relative">
+                <div className="absolute inset-0 bg-brand-gold/5 rounded-3xl animate-ping opacity-20" />
+                <Send className="w-10 h-10 relative z-10" />
               </div>
-
-              <div>
-                <label className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">Xabar matni</label>
-                <textarea
-                  className="w-full p-4 sm:p-6 bg-brand-black border border-white/10 rounded-2xl sm:rounded-[2rem] text-sm font-medium text-white focus:border-brand-gold outline-none transition shadow-inner"
-                  rows={4}
-                  placeholder="Xabaringizni yozing..."
-                  value={messageText}
-                  onChange={(e) => setMessageText(e.target.value)}
-                  autoFocus
-                />
+              <div className="space-y-2">
+                 <h3 className="text-2xl font-black text-white uppercase tracking-tight">Tez Orada</h3>
+                 <p className="text-white/40 font-bold uppercase tracking-widest text-[10px] leading-relaxed max-w-[240px]">
+                    Xabar yuborish tizimi tez orada ishga tushadi. Iltimos kuting.
+                 </p>
               </div>
-
-              <button
-                onClick={() => {
-                  if (!messageText.trim()) return;
-                  handleSendMessage(messageText, messageRecipientId);
-                  setIsSendMessageModalOpen(false);
-                  setMessageText('');
-                  console.log("Xabar muvaffaqiyatli yuborildi!");
-                }}
-                className="w-full py-4 sm:py-5 gold-gradient text-brand-black rounded-xl sm:rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
+              <button 
+                 onClick={() => setIsSendMessageModalOpen(false)}
+                 className="w-full py-4 bg-white/5 hover:bg-white/10 text-white/60 rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] border border-white/5 transition-all"
               >
-                Xabarni yuborish <Send className="w-4 h-4" />
+                 Tushunarli
               </button>
             </div>
           </div>
@@ -936,9 +903,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                 <tbody className="divide-y divide-white/5">
                   {[...operators]
                     .sort((a, b) => getUserSalesCount(b.id, 'month') - getUserSalesCount(a.id, 'month'))
-                    .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                    .slice((leaderboardPage - 1) * leaderboardPerPage, leaderboardPage * leaderboardPerPage)
                     .map((op, idx) => {
-                      const globalIdx = (currentPage - 1) * itemsPerPage + idx;
+                      const globalIdx = (leaderboardPage - 1) * leaderboardPerPage + idx;
                       const todayCount = getUserSalesCount(op.id, 'today');
                       const monthCount = getUserSalesCount(op.id, 'month');
                       const todayCheckIn = state.checkIns.find(ci => ci.userId === op.id && isDateMatch(ci.timestamp, today));
@@ -1015,9 +982,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
             <div className="md:hidden flex flex-col divide-y divide-white/5">
               {[...operators]
                 .sort((a, b) => getUserSalesCount(b.id, 'month') - getUserSalesCount(a.id, 'month'))
-                .slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage)
+                .slice((leaderboardPage - 1) * leaderboardPerPage, leaderboardPage * leaderboardPerPage)
                 .map((op, idx) => {
-                  const globalIdx = (currentPage - 1) * itemsPerPage + idx;
+                  const globalIdx = (leaderboardPage - 1) * leaderboardPerPage + idx;
                   const todayCount = getUserSalesCount(op.id, 'today');
                   const monthCount = getUserSalesCount(op.id, 'month');
                   const todayCheckIn = state.checkIns.find(ci => ci.userId === op.id && isDateMatch(ci.timestamp, today));
@@ -1092,27 +1059,27 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                     </div>
                   );
                 })}
-            </div>  {operators.length > itemsPerPage && (
+            </div>  {operators.length > leaderboardPerPage && (
               <div className="flex items-center justify-center gap-2 p-4 border-t border-white/5">
                 <button
                   onClick={() => {
-                    setCurrentPage(p => Math.max(1, p - 1));
+                    setLeaderboardPage(p => Math.max(1, p - 1));
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  disabled={currentPage === 1}
+                  disabled={leaderboardPage === 1}
                   className="p-2 rounded-lg hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronLeft className="w-4 h-4 text-white/60" />
                 </button>
                 <span className="text-xs font-bold text-white/60">
-                  {currentPage} / {Math.ceil(operators.length / itemsPerPage)}
+                  {leaderboardPage} / {Math.ceil(operators.length / leaderboardPerPage)}
                 </span>
                 <button
                   onClick={() => {
-                    setCurrentPage(p => Math.min(Math.ceil(operators.length / itemsPerPage), p + 1));
+                    setLeaderboardPage(p => Math.min(Math.ceil(operators.length / leaderboardPerPage), p + 1));
                     window.scrollTo({ top: 0, behavior: 'smooth' });
                   }}
-                  disabled={currentPage === Math.ceil(operators.length / itemsPerPage)}
+                  disabled={leaderboardPage === Math.ceil(operators.length / leaderboardPerPage)}
                   className="p-2 rounded-lg hover:bg-white/5 disabled:opacity-20 disabled:cursor-not-allowed transition-colors"
                 >
                   <ChevronRight className="w-4 h-4 text-white/60" />
@@ -1429,7 +1396,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {state.users.filter(u => u.role !== 'manager').map(u => {
+                  {state.users
+                    .filter(u => u.role !== 'manager')
+                    .slice((monitoringOperatorsPage - 1) * monitoringOperatorsPerPage, monitoringOperatorsPage * monitoringOperatorsPerPage)
+                    .map(u => {
                     // Calculate sales for this user in the selected timeframe or day
                     const getUserSales = () => {
                       const userSales = tableSales.filter(s => s.userId === u.id);
@@ -1465,11 +1435,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                             <p className="text-[8px] sm:text-[9px] font-black text-white/30 uppercase tracking-widest truncate">{u.phone}</p>
                           </div>
                         </td>
-                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#9b51e0] text-sm sm:text-base">{sales['Ucell']}</td>
-                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#009ee0] text-sm sm:text-base">{sales['Uztelecom']}</td>
-                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#eb1c24] text-sm sm:text-base">{sales['Mobiuz']}</td>
-                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#fdb913] text-sm sm:text-base">{sales['Beeline']}</td>
-                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-brand-gold">{total}</td>
+                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#9b51e0] text-sm sm:text-base">{sales['Ucell'].toLocaleString()}</td>
+                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#009ee0] text-sm sm:text-base">{sales['Uztelecom'].toLocaleString()}</td>
+                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#eb1c24] text-sm sm:text-base">{sales['Mobiuz'].toLocaleString()}</td>
+                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#fdb913] text-sm sm:text-base">{sales['Beeline'].toLocaleString()}</td>
+                        <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-brand-gold">{total.toLocaleString()}</td>
                       </tr>
                     );
                   })}
@@ -1479,7 +1449,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
 
             {/* Mobile Card View */}
             <div className="sm:hidden p-4 space-y-4">
-              {state.users.filter(u => u.role !== 'manager').map(u => {
+              {state.users
+                .filter(u => u.role !== 'manager')
+                .slice((monitoringOperatorsPage - 1) * monitoringOperatorsPerPage, monitoringOperatorsPage * monitoringOperatorsPerPage)
+                .map(u => {
                 const getUserSales = () => {
                   const userSales = tableSales.filter(s => s.userId === u.id);
                   const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
@@ -1538,6 +1511,41 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               })}
             </div>
           </div>
+
+          {/* Pagination for Monitoring Operators */}
+          {state.users.filter(u => u.role !== 'manager').length > monitoringOperatorsPerPage && (
+            <div className="flex items-center justify-center gap-3 p-6 border-t border-white/5 bg-brand-black/20 rounded-[2.5rem] mt-8">
+              <button
+                onClick={() => setMonitoringOperatorsPage(p => Math.max(1, p - 1))}
+                disabled={monitoringOperatorsPage === 1}
+                className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="flex gap-2">
+                {Array.from({ length: Math.ceil(state.users.filter(u => u.role !== 'manager').length / monitoringOperatorsPerPage) }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setMonitoringOperatorsPage(i + 1)}
+                    className={`w-10 h-10 rounded-xl font-black text-[10px] transition-all border ${
+                      monitoringOperatorsPage === i + 1 
+                        ? 'bg-brand-gold text-brand-black border-brand-gold shadow-lg shadow-brand-gold/20' 
+                        : 'bg-brand-black text-white/30 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setMonitoringOperatorsPage(p => Math.min(Math.ceil(state.users.filter(u => u.role !== 'manager').length / monitoringOperatorsPerPage), p + 1))}
+                disabled={monitoringOperatorsPage === Math.ceil(state.users.filter(u => u.role !== 'manager').length / monitoringOperatorsPerPage)}
+                className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1553,7 +1561,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
             </div>
           </div>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {filteredUsers.map(u => {
+            {filteredUsers.slice((staffPage - 1) * staffPerPage, staffPage * staffPerPage).map(u => {
               const todayCheckIn = state.checkIns.find(ci => ci.userId === u.id && isDateMatch(ci.timestamp, today));
               const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, u.workingHours) : null;
 
@@ -1572,8 +1580,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                       <>{u.firstName?.[0]}{u.lastName?.[0]}</>
                     )}
                   </div>
-                  <h3 className="text-lg font-black text-white">{u.firstName} {u.lastName}</h3>
-                  <p className="text-[10px] font-black uppercase text-white/30 tracking-widest mt-1">{u.role.replace('_', ' ')}</p>
+                  <h3 className="text-lg font-black text-white truncate px-2">{u.firstName} {u.lastName}</h3>
+                  <p className="text-[10px] font-black uppercase text-white/30 tracking-widest mt-1 truncate px-2">{u.role.replace('_', ' ')}</p>
                   <div className="mt-4 pt-4 border-t border-white/5 flex justify-around">
                     <div className="text-center"><p className="text-[10px] font-black text-white/30 uppercase">{t(language, 'today')}</p><p className={`font-black ${lateness?.isLate ? 'text-red-600' : 'text-brand-gold'}`}>{getUserSalesCount(u.id, 'today')}</p></div>
                     <div className="text-center"><p className="text-[10px] font-black text-white/30 uppercase">{t(language, 'month')}</p><p className="font-black text-white">{getUserSalesCount(u.id, 'month')}</p></div>
@@ -1582,6 +1590,41 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               );
             })}
           </div>
+
+          {/* Pagination for Staff Team */}
+          {filteredUsers.length > staffPerPage && (
+            <div className="flex items-center justify-center gap-3 p-6 border-t border-white/5 bg-brand-black/20 rounded-[2.5rem] mt-8">
+              <button
+                onClick={() => setStaffPage(p => Math.max(1, p - 1))}
+                disabled={staffPage === 1}
+                className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="flex gap-2">
+                {Array.from({ length: Math.ceil(filteredUsers.length / staffPerPage) }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setStaffPage(i + 1)}
+                    className={`w-10 h-10 rounded-xl font-black text-[10px] transition-all border ${
+                      staffPage === i + 1 
+                        ? 'bg-brand-gold text-brand-black border-brand-gold shadow-lg shadow-brand-gold/20' 
+                        : 'bg-brand-black text-white/30 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setStaffPage(p => Math.min(Math.ceil(filteredUsers.length / staffPerPage), p + 1))}
+                disabled={staffPage === Math.ceil(filteredUsers.length / staffPerPage)}
+                className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -1687,9 +1730,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                 </div>
                 <button
                   onClick={() => {
-                    setMessageRecipientId(selectedUser.id);
                     setIsSendMessageModalOpen(true);
-                    setMessageText('');
                   }}
                   className="flex-1 sm:flex-none p-3 bg-brand-gold/10 text-brand-gold rounded-2xl hover:bg-brand-gold hover:text-brand-black transition-all shadow-sm flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest border border-brand-gold/20"
                 >
@@ -2036,7 +2077,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                                   </span>
                                 </td>
                                 <td className="px-4 sm:px-8 py-4 sm:py-5 text-xs sm:text-sm font-bold text-white/70">{sale.tariff}</td>
-                                <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-brand-gold">{sale.count}</td>
+                                <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-brand-gold">{sale.count.toLocaleString()}</td>
                                 <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-white/70">{sale.bonus.toLocaleString()}</td>
                                 <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-brand-gold">{(sale.count + sale.bonus).toLocaleString()}</td>
                                 <td className="px-4 sm:px-8 py-4 sm:py-5 text-right text-[9px] sm:text-[10px] font-bold text-white/20">
@@ -2401,6 +2442,153 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                       return <SingleLocationMap location={startLoc} endLocation={endLoc} initials={initials} isDarkMode={isDarkMode} language={language} />;
                     })()}
                   </div>
+
+                  {/* OPERATOR RATING SECTION - shows after report is submitted */}
+                  {(() => {
+                    const targetDate = selectedDay || today;
+                    const dailyReport = state.reports.find(r => r.userId === selectedUser.id && r.date === targetDate);
+                    if (!dailyReport) return null;
+
+                    const existingRating = state.operatorRatings.find(
+                      r => r.operatorId === selectedUser.id && r.date === targetDate && r.ratedById === state.currentUser?.id
+                    );
+
+                    const displayStars = ratingSelectedStars || existingRating?.stars || 0;
+
+                    return (
+                      <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm">
+                        <div className="p-6 border-b border-white/5 bg-brand-dark">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold">
+                              <Star className="w-5 h-5" stroke="currentColor" strokeWidth={1.5} />
+                            </div>
+                            <div>
+                              <h3 className="text-lg font-black text-white tracking-tight">{t(language, 'rate_operator')}</h3>
+                              <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mt-0.5">
+                                {targetDate} {t(language, 'rating_for')}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="p-6 space-y-6">
+                            {/* Stars */}
+                          <div className="flex items-center justify-center gap-2">
+                            {[1, 2, 3, 4, 5].map(star => {
+                              const isActive = star <= (ratingStars || displayStars);
+                              return (
+                                <button
+                                  key={star}
+                                  onMouseEnter={() => setRatingStars(star)}
+                                  onMouseLeave={() => setRatingStars(0)}
+                                  onClick={() => {
+                                    setRatingSelectedStars(star);
+                                    if (!ratingComment && existingRating) {
+                                      setRatingComment(existingRating.comment);
+                                    }
+                                  }}
+                                  className={`p-2 rounded-xl transition-all duration-200 transform hover:scale-125 active:scale-95 ${
+                                    isActive
+                                      ? 'text-brand-gold drop-shadow-[0_0_8px_rgba(218,165,32,0.5)]'
+                                      : 'text-white/15 hover:text-white/30'
+                                  }`}
+                                >
+                                  <Star
+                                    className="w-10 h-10 transition-all duration-200"
+                                    fill={isActive ? 'currentColor' : 'none'}
+                                    stroke="currentColor"
+                                    strokeWidth={1.5}
+                                  />
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          {/* Star label */}
+                          <div className="text-center">
+                            <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">
+                              {(ratingStars || displayStars) === 0 && t(language, 'select_star_to_rate')}
+                              {(ratingStars || displayStars) === 1 && t(language, 'bad')}
+                              {(ratingStars || displayStars) === 2 && t(language, 'unsatisfactory')}
+                              {(ratingStars || displayStars) === 3 && t(language, 'average')}
+                              {(ratingStars || displayStars) === 4 && t(language, 'good')}
+                              {(ratingStars || displayStars) === 5 && t(language, 'excellent')}
+                            </span>
+                          </div>
+
+                          {/* Comment */}
+                          <div>
+                            <textarea
+                              value={ratingSelectedStars > 0 ? ratingComment : (existingRating?.comment || '')}
+                              onChange={e => setRatingComment(e.target.value)}
+                              placeholder={t(language, 'rating_comment_placeholder')}
+                              rows={3}
+                              className="w-full bg-brand-black border border-white/10 rounded-2xl px-5 py-4 text-white text-sm font-medium placeholder:text-white/20 outline-none focus:border-brand-gold/50 transition-all resize-none"
+                            />
+                          </div>
+
+                          {/* Submit button */}
+                          <button
+                            onClick={async () => {
+                              if ((ratingSelectedStars || displayStars) === 0) return;
+                              setIsSubmittingRating(true);
+                              try {
+                                await operatorRatingService.submitRating({
+                                  operator_id: selectedUser.id,
+                                  date: targetDate,
+                                  stars: ratingSelectedStars || displayStars,
+                                  comment: ratingComment || existingRating?.comment || ''
+                                });
+                                await refreshData();
+                                setRatingSelectedStars(0);
+                                setRatingComment('');
+                                setRatingStars(0);
+                              } catch (err) {
+                                console.error('Failed to submit rating', err);
+                              } finally {
+                                setIsSubmittingRating(false);
+                              }
+                            }}
+                            disabled={isSubmittingRating || (ratingSelectedStars === 0 && !existingRating)}
+                            className={`w-full py-4 rounded-2xl font-black text-sm uppercase tracking-widest transition-all duration-300 flex items-center justify-center gap-2 ${
+                              (ratingSelectedStars || displayStars) > 0
+                                ? 'bg-brand-gold text-brand-black hover:bg-brand-gold/90 shadow-lg shadow-brand-gold/20 active:scale-[0.98]'
+                                : 'bg-white/5 text-white/20 cursor-not-allowed border border-white/5'
+                            }`}
+                          >
+                            {isSubmittingRating ? (
+                              <div className="w-5 h-5 border-2 border-brand-black/20 border-t-brand-black rounded-full animate-spin" />
+                            ) : (
+                              <>
+                                <Star className="w-4 h-4" fill={existingRating ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth={1.5} />
+                                {existingRating ? t(language, 'update_rating') : t(language, 'submit_rating')}
+                              </>
+                            )}
+                          </button>
+
+                          {/* Existing rating info */}
+                          {existingRating && ratingSelectedStars === 0 && (
+                            <div className="bg-brand-gold/5 border border-brand-gold/10 rounded-2xl p-4 flex items-center gap-3">
+                              <div className="flex gap-0.5">
+                                {[1, 2, 3, 4, 5].map(s => (
+                                  <Star
+                                    key={s}
+                                    className={`w-4 h-4 ${s <= existingRating.stars ? 'text-brand-gold' : 'text-white/10'}`}
+                                    fill={s <= existingRating.stars ? 'currentColor' : 'none'}
+                                    stroke="currentColor"
+                                    strokeWidth={1.5}
+                                  />
+                                ))}
+                              </div>
+                              <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">
+                                {t(language, 'previous_rating')}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
                 </div>
               </div>
             </div>
@@ -2409,115 +2597,19 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
       )}
 
       {activeTab === 'messages' && (
-        <div className="space-y-6 animate-in fade-in max-w-4xl mx-auto px-2 sm:px-0">
-          <div className="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <h2 className="text-xl sm:text-2xl font-black text-white">{t(language, 'message_center')}</h2>
-            <button
-              onClick={() => {
-                setMessageRecipientId('all');
-                setIsSendMessageModalOpen(true);
-                setMessageText('');
-              }}
-              className="w-full sm:w-auto flex items-center justify-center gap-2 bg-brand-gold px-6 py-3 rounded-2xl hover:bg-brand-gold/90 transition-all active:scale-95 shadow-lg shadow-brand-gold/20"
-            >
-              <Send className="w-4 h-4 text-brand-black" />
-              <span className="text-[10px] font-black text-brand-black uppercase tracking-widest">Xabar yuborish</span>
-            </button>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4">
-            {state.messages.length > 0 ? (
-              [...state.messages]
-                .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-                .map(m => (
-                  <div
-                    key={m.id}
-                    className={`p-5 sm:p-6 rounded-[2rem] border transition-all relative group ${m.isRead ? 'bg-brand-dark border-white/10' : 'bg-red-500/10 border-red-500/30 shadow-lg shadow-red-500/5'}`}
-                    onClick={() => !m.isRead && handleMarkMessageAsRead(m.id)}
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs shrink-0 ${m.senderRole === 'manager' ? 'bg-brand-gold text-brand-black' : 'bg-brand-black text-brand-gold border border-brand-gold/20'}`}>
-                          {m.senderName[0]}
-                        </div>
-                        <div className="min-w-0">
-                          <h4 className="font-black text-white text-sm truncate">
-                            {m.senderName}
-                            {(!m.recipientId || m.recipientId === 'all') ? (
-                              <span className="text-brand-gold font-medium ml-2 uppercase text-[10px] tracking-widest bg-brand-gold/10 px-2 py-0.5 rounded-full">
-                                → {m.senderRole === 'manager' ? 'Barchaga' : 'Menejerlarga'}
-                              </span>
-                            ) : (
-                              <span className="text-white/30 font-medium ml-2">
-                                → {state.users.find(u => u.id === m.recipientId)?.firstName || 'Xodim'}
-                              </span>
-                            )}
-                          </h4>
-                          <p className="text-[10px] text-white/30 font-bold">{formatUzDateTime(m.timestamp)}</p>
-                        </div>
-                      </div>
-                      {!m.isRead && <span className="px-2 py-1 bg-brand-gold text-brand-black text-[8px] font-black rounded-md uppercase tracking-widest shrink-0">Yangi</span>}
-                    </div>
-                    <p className="text-white/70 font-medium text-sm leading-relaxed mb-4 pl-1">{m.text}</p>
-
-                    {m.senderRole !== 'manager' && (
-                      <div className="flex justify-end">
-                        {isReplyingTo === m.id ? (
-                          <div className="w-full space-y-3 animate-in slide-in-from-top-2">
-                            <textarea
-                              className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black text-sm focus:border-brand-gold outline-none transition shadow-inner text-white"
-                              rows={3}
-                              placeholder="Javobingizni yozing..."
-                              value={replyText}
-                              onChange={e => setReplyText(e.target.value)}
-                              autoFocus
-                            />
-                            <div className="flex gap-2 justify-end">
-                              <button
-                                onClick={() => {
-                                  if (!replyText.trim()) return;
-                                  handleSendMessage(`MENEJERDAN JAVOB: ${replyText}`, m.senderId);
-                                  setReplyText('');
-                                  setIsReplyingTo(null);
-                                  console.log("Javob yuborildi!");
-                                }}
-                                className="px-6 py-2.5 bg-brand-gold text-brand-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-gold/90 transition shadow-md"
-                              >
-                                Yuborish
-                              </button>
-                              <button
-                                onClick={() => setIsReplyingTo(null)}
-                                className="px-6 py-2.5 bg-white/10 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-white/20 transition border border-white/10"
-                              >
-                                Bekor qilish
-                              </button>
-                            </div>
-                          </div>
-                        ) : (
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setIsReplyingTo(m.id);
-                            }}
-                            className="w-full sm:w-auto px-6 py-2.5 bg-brand-black border border-brand-gold/20 text-brand-gold rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand-gold hover:text-brand-black transition-all shadow-sm"
-                          >
-                            Javob berish
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </div>
-                ))
-            ) : (
-              <div className="bg-brand-dark rounded-[3rem] p-12 sm:p-20 text-center border border-white/10 shadow-sm">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-white/10">
-                  <Phone className="w-8 h-8 sm:w-10 sm:h-10" />
-                </div>
-                <h3 className="text-lg sm:text-xl font-black text-white mb-2">{t(language, 'no_messages')}</h3>
-                <p className="text-white/30 font-medium text-sm">{t(language, 'no_messages_desc')}</p>
-              </div>
-            )}
-          </div>
+        <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 animate-in fade-in zoom-in duration-700">
+           <div className="w-24 h-24 bg-brand-gold/10 rounded-[2.5rem] flex items-center justify-center text-brand-gold mb-8 border border-brand-gold/20 shadow-2xl relative">
+              <div className="absolute inset-0 bg-brand-gold/5 rounded-[2.5rem] animate-ping opacity-20" />
+              <div className="absolute inset-0 bg-brand-gold/5 rounded-[2.5rem] scale-150 blur-xl opacity-30" />
+              <Send className="w-10 h-10 relative z-10" />
+           </div>
+           <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 text-center">Tez Orada</h2>
+           <p className="text-white/40 font-bold uppercase tracking-[0.3em] text-[10px] text-center max-w-[280px] leading-loose">
+              Xabarlar bo'limi ustida ish olib borilmoqda. Tez orada foydalanishga topshiriladi.
+           </p>
+           <div className="mt-12 px-6 py-3 bg-white/5 rounded-2xl border border-white/10">
+              <span className="text-[10px] font-black text-brand-gold uppercase tracking-[0.2em]">In Development</span>
+           </div>
         </div>
       )}
 
@@ -2931,8 +3023,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
                 <div className="bg-brand-black rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 max-w-2xl w-full shadow-2xl border border-white/10 animate-in zoom-in-95 duration-300">
                   <div className="flex items-center justify-between mb-6">
-                    <h3 className="text-lg sm:text-xl font-black text-white">
-                      {inventoryModalUser.firstName} {inventoryModalUser.lastName} - {t(language, 'sim_inventory')}
+                    <h3 className="text-lg sm:text-xl font-black text-white min-w-0 flex-1 truncate pr-4">
+                      {inventoryModalUser.nickname || inventoryModalUser.phone} - {t(language, 'sim_inventory')}
                     </h3>
                     <button onClick={() => setInventoryModalUser(null)} className="p-2 hover:bg-white/5 rounded-full transition"><X className="w-5 h-5 text-white/30" /></button>
                   </div>
@@ -3047,7 +3139,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               </div>
             </div>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-              {operators.map(user => {
+              {operators.slice((simPage - 1) * simPerPage, simPage * simPerPage).map(user => {
                 const counts = user.inventory || {
                   'Ucell': 0,
                   'Mobiuz': 0,
@@ -3071,8 +3163,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                     }}
                     className="bg-brand-black p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 shadow-sm hover:border-brand-gold/30 transition-all cursor-pointer group active:scale-95"
                   >
-                    <div className="flex items-center justify-between mb-6">
-                      <div className="flex items-center gap-3 sm:gap-4">
+                    <div className="flex items-center justify-between mb-6 gap-4">
+                      <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
                         <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white/5 flex items-center justify-center font-black text-white overflow-hidden text-lg sm:text-xl shadow-inner shrink-0">
                           {user.photo ? (
                             <img src={user.photo} alt={user.firstName} className="w-full h-full object-cover" />
@@ -3081,7 +3173,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                           )}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-lg sm:text-2xl font-black text-white leading-none mb-1 group-hover:text-brand-gold transition-colors truncate">{user.firstName} {user.lastName}</h4>
+                          <h4 className="text-lg sm:text-2xl font-black text-white leading-none mb-1 group-hover:text-brand-gold transition-colors truncate">{user.nickname || user.phone}</h4>
                           <p className="text-[9px] sm:text-[10px] font-bold text-white/30 uppercase tracking-widest">{t(language, 'operator')}</p>
                         </div>
                       </div>
@@ -3107,6 +3199,41 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                 );
               })}
             </div>
+
+            {/* Pagination UI */}
+            {operators.length > simPerPage && (
+              <div className="mt-10 flex items-center justify-center gap-3">
+                <button
+                  onClick={() => setSimPage(p => Math.max(1, p - 1))}
+                  disabled={simPage === 1}
+                  className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all"
+                >
+                  <ChevronLeft className="w-5 h-5" />
+                </button>
+                <div className="flex gap-2">
+                  {Array.from({ length: Math.ceil(operators.length / simPerPage) }).map((_, i) => (
+                    <button
+                      key={i}
+                      onClick={() => setSimPage(i + 1)}
+                      className={`w-10 h-10 rounded-xl font-black text-[10px] transition-all border ${
+                        simPage === i + 1 
+                          ? 'bg-brand-gold text-brand-black border-brand-gold shadow-lg shadow-brand-gold/20' 
+                          : 'bg-brand-black text-white/30 border-white/10 hover:border-white/20'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => setSimPage(p => Math.min(Math.ceil(operators.length / simPerPage), p + 1))}
+                  disabled={simPage === Math.ceil(operators.length / simPerPage)}
+                  className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all"
+                >
+                  <ChevronRight className="w-5 h-5" />
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3119,8 +3246,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
             {pendingUsers.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {pendingUsers.map(u => (
-                  <div key={u.id} className="bg-brand-dark p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 flex flex-col justify-between shadow-sm gap-4">
-                    <div className="flex items-center gap-3 sm:gap-4">
+                  <div key={u.id} className="bg-brand-dark p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 flex flex-col justify-between shadow-sm gap-4 overflow-hidden">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 w-full">
                       <div className="w-12 h-12 sm:w-14 sm:h-14 bg-brand-gold/10 text-brand-gold rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0">{u.firstName?.[0]}</div>
                       <div className="min-w-0">
                         <h4 className="text-base sm:text-lg font-black text-white leading-none mb-1 truncate">{u.firstName} {u.lastName}</h4>
@@ -3154,35 +3281,138 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
           <div className="space-y-4 sm:space-y-6">
             <h3 className="text-lg sm:text-xl font-black text-white px-2">Tasdiqlanganlar</h3>
             {approvedUsers.length > 0 ? (
+              <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                {approvedUsers.map(u => (
-                  <div key={u.id} className="bg-brand-dark p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 flex flex-col shadow-sm gap-4">
-                    <div className="flex items-center gap-3 sm:gap-4">
+                {approvedUsers.slice((approvalsPage - 1) * approvalsPerPage, approvalsPage * approvalsPerPage).map(u => (
+                  <div key={u.id} className="bg-brand-dark p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 flex flex-col shadow-sm gap-4 overflow-hidden">
+                    <div className="flex items-center gap-3 sm:gap-4 min-w-0 w-full">
                       <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/5 text-white/50 rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0">{u.firstName?.[0]}</div>
-                      <div className="min-w-0">
+                      <div className="min-w-0 flex-1">
                         <h4 className="text-base sm:text-lg font-black text-white leading-none mb-1 truncate">{u.firstName} {u.lastName}</h4>
-                        <p className="text-[10px] sm:text-xs text-white/30 font-bold truncate">{u.phone}</p>
-                        <p className="text-[10px] sm:text-xs text-white/50 font-mono mt-1 flex items-center gap-2">
-                          Parol: {u.password || 'Kiritilmagan'}
-                          <button
-                            onClick={() => {
-                              setPasswordFormUserId(u.id);
-                              setNewPassword('');
-                              setIsPasswordModalOpen(true);
-                            }}
-                            className="p-1 hover:bg-white/10 rounded transition"
-                          >
-                            <Edit className="w-3 h-3 text-brand-gold" />
-                          </button>
-                        </p>
+                        <p className="text-[10px] sm:text-xs text-white/30 font-bold truncate">@{u.nickname || u.phone}</p>
+                        <div className="text-[10px] sm:text-xs text-white/50 font-mono mt-1 flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg w-fit">
+                          <span className="text-white/20 uppercase tracking-tighter mr-1 text-[9px]">Parol:</span> 
+                          <span className="text-brand-gold font-bold">
+                            {showPasswords[u.id] ? (u.password || '123456') : '••••••'}
+                          </span>
+                          <div className="flex items-center gap-1 ml-2 border-l border-white/10 pl-2">
+                            <button
+                              onClick={() => setShowPasswords(prev => ({ ...prev, [u.id]: !prev[u.id] }))}
+                              className="p-1 hover:text-white transition-colors"
+                              title={showPasswords[u.id] ? "Yashirish" : "Ko'rsatish"}
+                            >
+                              {showPasswords[u.id] ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                            </button>
+                            <button
+                              onClick={() => {
+                                setPasswordFormUserId(u.id);
+                                setNewPassword('');
+                                setIsPasswordModalOpen(true);
+                              }}
+                              className="p-1 hover:text-brand-gold transition-colors"
+                              title="Tahrirlash"
+                            >
+                              <Edit className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
                 ))}
               </div>
+
+              {/* Pagination UI for Approved Users */}
+              {approvedUsers.length > approvalsPerPage && (
+                <div className="mt-8 flex items-center justify-center gap-3 bg-brand-black/20 p-4 rounded-[2rem] border border-white/5">
+                  <button
+                    onClick={() => setApprovalsPage(p => Math.max(1, p - 1))}
+                    disabled={approvalsPage === 1}
+                    className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                  >
+                    <ChevronLeft className="w-5 h-5" />
+                  </button>
+                  <div className="flex gap-2">
+                    {Array.from({ length: Math.ceil(approvedUsers.length / approvalsPerPage) }).map((_, i) => (
+                      <button
+                        key={i}
+                        onClick={() => setApprovalsPage(i + 1)}
+                        className={`w-10 h-10 rounded-xl font-black text-[10px] transition-all border ${
+                          approvalsPage === i + 1 
+                            ? 'bg-brand-gold text-brand-black border-brand-gold shadow-lg shadow-brand-gold/20' 
+                            : 'bg-brand-black text-white/30 border-white/10 hover:border-white/20'
+                        }`}
+                      >
+                        {i + 1}
+                      </button>
+                    ))}
+                  </div>
+                  <button
+                    onClick={() => setApprovalsPage(p => Math.min(Math.ceil(approvedUsers.length / approvalsPerPage), p + 1))}
+                    disabled={approvalsPage === Math.ceil(approvedUsers.length / approvalsPerPage)}
+                    className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                  >
+                    <ChevronRight className="w-5 h-5" />
+                  </button>
+                </div>
+              )}
+            </>
             ) : (
               <div className="text-center py-16 sm:py-20 bg-brand-dark rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 italic text-white/30 font-bold uppercase tracking-widest text-[9px] sm:text-[10px] mx-2 sm:mx-0">Tasdiqlangan foydalanuvchilar mavjud emas</div>
             )}
+          </div>
+        </div>
+      )}
+
+      {activeTab === 'settings' && (
+        <div className="max-w-4xl mx-auto space-y-8 animate-in fade-in duration-500">
+          <div className="flex items-center gap-4 mb-8">
+            <div className="p-4 bg-brand-gold/10 text-brand-gold rounded-[2rem] shadow-xl border border-brand-gold/20">
+              <Globe className="w-8 h-8" />
+            </div>
+            <div>
+              <h2 className="text-3xl font-black text-white tracking-tight uppercase">{t(language, 'settings')}</h2>
+              <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1">Tizimning umumiy sozlamalari</p>
+            </div>
+          </div>
+
+          <div className="bg-brand-dark p-8 sm:p-12 rounded-[3.5rem] border border-white/10 shadow-2xl relative overflow-hidden group">
+            <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold/5 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-brand-gold/10 transition-all duration-700"></div>
+            
+            <div className="relative z-10 space-y-10">
+              <div className="flex items-center justify-between">
+                <div className="space-y-2">
+                  <h3 className="text-xl font-black text-white uppercase tracking-tight">Reyting bo'limi ko'rinishi</h3>
+                  <p className="text-sm text-white/40 font-medium leading-relaxed max-w-md">
+                    Operatorlar uchun reyting bo'limini yoqish yoki o'chirish. O'chirilganda operatorlarga "{t(language, 'rating_disabled_message')}" yozuvi ko'rinadi.
+                  </p>
+                </div>
+                
+                <button
+                  onClick={async () => {
+                    const newValue = !state.globalSettings?.rating_enabled;
+                    await settingsService.updateSettings({ rating_enabled: newValue });
+                    await refreshData();
+                  }}
+                  className={`relative w-24 h-12 rounded-full transition-all duration-500 p-1.5 ${state.globalSettings?.rating_enabled ? 'bg-brand-gold shadow-lg shadow-brand-gold/30' : 'bg-white/5 border border-white/10'}`}
+                >
+                  <div className={`w-9 h-9 rounded-full transition-all duration-500 flex items-center justify-center shadow-xl ${state.globalSettings?.rating_enabled ? 'translate-x-12 bg-white' : 'translate-x-0 bg-white/10'}`}>
+                    {state.globalSettings?.rating_enabled ? (
+                      <Check className="w-5 h-5 text-brand-black" />
+                    ) : (
+                      <X className="w-5 h-5 text-white/30" />
+                    )}
+                  </div>
+                </button>
+              </div>
+
+              <div className="pt-10 border-t border-white/5 flex items-center gap-4 text-white/20">
+                <AlertTriangle className="w-5 h-5 shrink-0" />
+                <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed">
+                  Sozlamalar o'zgartirilishi bilanoq barcha operatorlar uchun real vaqt rejimida amal qiladi.
+                </p>
+              </div>
+            </div>
           </div>
         </div>
       )}
@@ -3194,10 +3424,22 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
           {/* Desktop Table View */}
           <div className="hidden sm:block overflow-x-auto">
             <table className="w-full text-left min-w-[600px]">
-              <thead className="bg-brand-black text-white/30 text-[9px] sm:text-[10px] font-black uppercase tracking-widest"><tr><th className="px-4 sm:px-8 py-4">{t(language, 'employee')}</th><th className="px-4 sm:px-8 py-4">{t(language, 'date')}</th><th className="px-4 sm:px-8 py-4">{t(language, 'summary')}</th><th className="px-4 sm:px-8 py-4 text-right">{t(language, 'time')}</th></tr></thead>
+              <thead className="bg-brand-black text-white/30 text-[9px] sm:text-[10px] font-black uppercase tracking-widest">
+                <tr>
+                  <th className="px-4 sm:px-8 py-4">{t(language, 'employee')}</th>
+                  <th className="px-4 sm:px-8 py-4">{t(language, 'date')}</th>
+                  <th className="px-4 sm:px-8 py-4">{t(language, 'summary')}</th>
+                  <th className="px-4 sm:px-8 py-4 text-center">{t(language, 'time')}</th>
+                  <th className="px-4 sm:px-8 py-4 text-right">Baho</th>
+                </tr>
+              </thead>
               <tbody className="divide-y divide-white/5">
-                {state.reports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((rep, idx) => {
+                {state.reports
+                  .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+                  .slice((reportsPage - 1) * reportsPerPage, reportsPage * reportsPerPage)
+                  .map((rep, idx) => {
                   const u = state.users.find(user => user.id === rep.userId);
+                  const rating = state.operatorRatings.find(r => r.operatorId === rep.userId && r.date === rep.date);
                   return (
                     <tr
                       key={idx}
@@ -3218,11 +3460,28 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                       </td>
                       <td className="px-4 sm:px-8 py-4 sm:py-6 text-xs sm:text-sm text-white/30 font-medium whitespace-nowrap">{rep.date}</td>
                       <td className="px-4 sm:px-8 py-4 sm:py-6 text-xs sm:text-sm text-white/70 italic leading-relaxed truncate max-w-[150px] sm:max-w-xs">"{rep.summary}"</td>
+                      <td className="px-4 sm:px-8 py-4 sm:py-6 text-center">
+                        <span className="text-[8px] sm:text-[10px] font-black text-brand-gold bg-brand-gold/10 px-2 sm:px-3 py-1 rounded-lg whitespace-nowrap">
+                          {formatUzTime(rep.timestamp)}
+                        </span>
+                      </td>
                       <td className="px-4 sm:px-8 py-4 sm:py-6 text-right">
                         <div className="flex items-center justify-end gap-2 sm:gap-3">
-                          <span className="text-[8px] sm:text-[10px] font-black text-brand-gold bg-brand-gold/10 px-2 sm:px-3 py-1 rounded-lg whitespace-nowrap">
-                            {formatUzTime(rep.timestamp)}
-                          </span>
+                          {rating ? (
+                            <div className="flex gap-0.5" title={rating.comment}>
+                              {[1, 2, 3, 4, 5].map(s => (
+                                <Star 
+                                  key={s} 
+                                  className={`w-3 h-3 ${s <= rating.stars ? 'text-brand-gold' : 'text-white/10'}`} 
+                                  fill={s <= rating.stars ? 'currentColor' : 'none'}
+                                  stroke="currentColor"
+                                  strokeWidth={1.5}
+                                />
+                              ))}
+                            </div>
+                          ) : (
+                            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Baholanmagan</span>
+                          )}
                           <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 text-white/10 group-hover:text-brand-gold transition-colors shrink-0" />
                         </div>
                       </td>
@@ -3235,7 +3494,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
 
           {/* Mobile Card View */}
           <div className="sm:hidden p-4 space-y-4">
-            {state.reports.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).map((rep, idx) => {
+            {state.reports
+              .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+              .slice((reportsPage - 1) * reportsPerPage, reportsPage * reportsPerPage)
+              .map((rep, idx) => {
               const u = state.users.find(user => user.id === rep.userId);
               return (
                 <div
@@ -3257,9 +3519,27 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                         <p className="text-[10px] text-white/30 font-bold">{rep.date}</p>
                       </div>
                     </div>
-                    <span className="text-[9px] font-black text-brand-gold bg-brand-gold/10 px-2 py-1 rounded-lg">
-                      {formatUzTime(rep.timestamp)}
-                    </span>
+                    <div className="flex flex-col items-end gap-2">
+                      <span className="text-[9px] font-black text-brand-gold bg-brand-gold/10 px-2 py-1 rounded-lg">
+                        {formatUzTime(rep.timestamp)}
+                      </span>
+                      {(() => {
+                        const rating = state.operatorRatings.find(r => r.operatorId === rep.userId && r.date === rep.date);
+                        return rating && (
+                          <div className="flex gap-0.5">
+                            {[1, 2, 3, 4, 5].map(s => (
+                              <Star 
+                                key={s} 
+                                className={`w-2.5 h-2.5 ${s <= rating.stars ? 'text-brand-gold' : 'text-white/10'}`} 
+                                fill={s <= rating.stars ? 'currentColor' : 'none'}
+                                stroke="currentColor"
+                                strokeWidth={1.5}
+                              />
+                            ))}
+                          </div>
+                        );
+                      })()}
+                    </div>
                   </div>
 
                   <div className="bg-white/5 p-3 rounded-xl border border-white/5">
@@ -3273,6 +3553,41 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               );
             })}
           </div>
+
+          {/* Pagination for Reports */}
+          {state.reports.length > reportsPerPage && (
+            <div className="flex items-center justify-center gap-3 p-6 border-t border-white/5 bg-brand-black/20 rounded-[2.5rem] mt-8">
+              <button
+                onClick={() => setReportsPage(p => Math.max(1, p - 1))}
+                disabled={reportsPage === 1}
+                className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+              >
+                <ChevronLeft className="w-5 h-5" />
+              </button>
+              <div className="flex gap-2">
+                {Array.from({ length: Math.ceil(state.reports.length / reportsPerPage) }).map((_, i) => (
+                  <button
+                    key={i}
+                    onClick={() => setReportsPage(i + 1)}
+                    className={`w-10 h-10 rounded-xl font-black text-[10px] transition-all border ${
+                      reportsPage === i + 1 
+                        ? 'bg-brand-gold text-brand-black border-brand-gold shadow-lg shadow-brand-gold/20' 
+                        : 'bg-brand-black text-white/30 border-white/10 hover:border-white/20'
+                    }`}
+                  >
+                    {i + 1}
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={() => setReportsPage(p => Math.min(Math.ceil(state.reports.length / reportsPerPage), p + 1))}
+                disabled={reportsPage === Math.ceil(state.reports.length / reportsPerPage)}
+                className="p-3 bg-brand-black border border-white/10 rounded-xl text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+              >
+                <ChevronRight className="w-5 h-5" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -3536,8 +3851,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               </div>
 
               {/* Timeframe Filters - Centered on Desktop */}
-              <div className="flex flex-col items-center gap-4 w-full lg:w-auto flex-1">
-                <div className="flex items-center gap-1 sm:gap-2 bg-brand-black p-1.5 rounded-xl sm:rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto sm:overflow-visible custom-scrollbar">
+              <div className="flex flex-col items-center gap-4 w-full lg:w-auto flex-1 relative">
+                {/* Desktop Buttons */}
+                <div className="hidden xs:flex items-center gap-1 sm:gap-2 bg-brand-black p-1.5 rounded-xl sm:rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto sm:overflow-visible custom-scrollbar">
                   {[
                     { id: 'today', label: 'Bugun' },
                     { id: 'week', label: 'Hafta' },
@@ -3552,6 +3868,50 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                       {t.label}
                     </button>
                   ))}
+                </div>
+
+                {/* Mobile Dropdown */}
+                <div className="xs:hidden w-full relative">
+                  <button
+                    onClick={() => setIsRatingTimeframeDropdownOpen(!isRatingTimeframeDropdownOpen)}
+                    className="w-full flex items-center justify-between px-4 py-3 bg-brand-black border border-white/10 rounded-xl text-xs font-bold text-white uppercase tracking-widest shadow-lg"
+                  >
+                    <span className="flex items-center gap-2">
+                      <Trophy className="w-4 h-4 text-brand-gold" />
+                      {[
+                        { id: 'today', label: 'Bugun' },
+                        { id: 'week', label: 'Hafta' },
+                        { id: 'month', label: 'Oy' },
+                        { id: 'custom', label: 'Oraliq' }
+                      ].find(t => t.id === ratingTimeframe)?.label}
+                    </span>
+                    <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${isRatingTimeframeDropdownOpen ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {isRatingTimeframeDropdownOpen && (
+                    <>
+                      <div className="fixed inset-0 z-[100]" onClick={() => setIsRatingTimeframeDropdownOpen(false)}></div>
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-brand-dark border border-white/10 rounded-xl shadow-2xl z-[110] overflow-hidden animate-in fade-in slide-in-from-top-2">
+                        {[
+                          { id: 'today', label: 'Bugun' },
+                          { id: 'week', label: 'Hafta' },
+                          { id: 'month', label: 'Oy' },
+                          { id: 'custom', label: 'Oraliq' }
+                        ].map(t => (
+                          <button
+                            key={t.id}
+                            onClick={() => {
+                              setRatingTimeframe(t.id as any);
+                              setIsRatingTimeframeDropdownOpen(false);
+                            }}
+                            className={`w-full text-left px-5 py-3.5 text-xs font-bold uppercase tracking-widest transition-colors ${ratingTimeframe === t.id ? 'bg-brand-gold text-brand-black' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                          >
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                 </div>
 
                 {/* Secondary Filters (Month/Custom) - Centered below timeframe */}
@@ -3701,7 +4061,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               .sort((a, b) => b.sales - a.sales);
 
             return (
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mt-6 sm:mt-8 items-start">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6 mt-6 sm:mt-8 items-start">
                 {['gold', 'silver', 'bronze'].map((leagueName) => {
                   // Filter users belonging to this league using historical data
                   const groupUsers = operatorRankings.filter(u => {
@@ -3737,7 +4097,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                                 </div>
                                 <div className="min-w-0">
                                   <p className="font-bold text-white flex items-center gap-2 text-xs sm:text-sm truncate">
-                                    {u.firstName} {u.lastName}
+                                    <span className="truncate">{u.firstName} {u.lastName}</span>
                                   </p>
                                   <p className="text-[8px] sm:text-[9px] font-medium text-white/40 truncate">{u.department || 'Bo\'limsiz'}</p>
                                 </div>
@@ -4326,12 +4686,18 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
 };
 
 const StatCard = ({ label, value, icon, color, companySales = [], operators = [], isExpanded, onToggle }: any) => {
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const itemsPerPage = 6;
+
   const operatorSales = useMemo(() => {
     return operators.map((op: any) => {
       const sales = companySales.filter((s: any) => s.userId === op.id).reduce((sum: number, s: any) => sum + s.count + (s.bonus || 0), 0);
       return { ...op, sales };
     }).sort((a: any, b: any) => b.sales - a.sales);
   }, [companySales, operators]);
+
+  const totalPages = Math.ceil(operatorSales.length / itemsPerPage);
+  const currentSales = operatorSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   return (
     <div className="bg-brand-dark rounded-3xl border border-white/5 shadow-xl transition-all overflow-hidden">
@@ -4357,8 +4723,8 @@ const StatCard = ({ label, value, icon, color, companySales = [], operators = []
       >
         <div className="p-4 pt-0 border-t border-white/5 bg-black/20">
           {operatorSales.length > 0 ? (
-            <div className="flex flex-col gap-2 mt-3 max-h-[400px] overflow-y-auto custom-scrollbar pr-1">
-              {operatorSales.map((op: any) => (
+            <div className="flex flex-col gap-2 mt-3 overflow-y-auto custom-scrollbar pr-1">
+              {currentSales.map((op: any) => (
                 <div key={op.id} className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
                   <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-lg bg-brand-black flex items-center justify-center text-[10px] font-bold border border-white/10 overflow-hidden shrink-0">
@@ -4368,11 +4734,32 @@ const StatCard = ({ label, value, icon, color, companySales = [], operators = []
                         <>{op.firstName?.[0]}{op.lastName?.[0]}</>
                       )}
                     </div>
-                    <span className="text-xs font-bold text-white/80 truncate">{op.firstName} {op.lastName}</span>
+                    <span className="text-xs font-bold text-white/80 truncate max-w-[120px]">{op.firstName} {op.lastName}</span>
                   </div>
                   <span className="text-sm font-black text-brand-gold">{op.sales}</span>
                 </div>
               ))}
+              
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pb-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.max(1, p - 1)); }}
+                    disabled={currentPage === 1}
+                    className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
+                  >
+                    Oldingi
+                  </button>
+                  <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">{currentPage} / {totalPages}</span>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.min(totalPages, p + 1)); }}
+                    disabled={currentPage === totalPages}
+                    className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
+                  >
+                    Keyingi
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <p className="text-xs text-white/40 text-center mt-3 py-2">Xodimlar yo'q</p>
@@ -4390,9 +4777,11 @@ const RefinedStatCard = ({ label, value, icon, color, onClick, isActive }: any) 
   >
     <div className="flex items-center gap-4">
       <div className={`${color} text-white p-3 rounded-xl shadow-md`}>{React.cloneElement(icon, { className: 'w-5 h-5' })}</div>
-      <div>
-        <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 ${isActive ? 'text-brand-gold' : 'text-white/40'}`}>{label}</p>
-        <p className="text-lg font-black text-white truncate max-w-[100px]">{value}</p>
+      <div className="flex-1 min-w-0">
+        <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 truncate ${isActive ? 'text-brand-gold' : 'text-white/40'}`}>{label}</p>
+        <p className="text-lg font-black text-white truncate w-full">
+          {typeof value === 'number' ? value.toLocaleString('uz-UZ') : value}
+        </p>
       </div>
     </div>
   </div>

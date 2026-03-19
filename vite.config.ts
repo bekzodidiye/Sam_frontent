@@ -8,13 +8,13 @@ export default defineConfig(({ mode }) => {
 
   return {
     server: {
-      port: 3000,
+      port: 3003,
       strictPort: true,
       host: '0.0.0.0',
       allowedHosts: true,
     },
     preview: {
-      port: 3000,
+      port: 3003,
       host: '0.0.0.0',
       allowedHosts: true,
     },

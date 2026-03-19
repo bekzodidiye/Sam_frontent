@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1/';
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8003/api/v1/';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -62,6 +62,7 @@ export const userService = {
 export const checkInService = {
   getCheckIns: () => api.get('checkins/'),
   createCheckIn: (data: any) => api.post('checkins/', data),
+  updateCheckIn: (id: string, data: any) => api.patch(`checkins/${id}/`, data),
 
   /**
    * Creates a CheckIn with a photo using multipart/form-data.
@@ -177,6 +178,17 @@ export const linkService = {
     });
   },
   deleteSalesLink: (id: string) => api.delete(`sales_links/${id}/`),
+};
+
+export const operatorRatingService = {
+  getRatings: () => api.get('operator_ratings/'),
+  submitRating: (data: { operator_id: string; date: string; stars: number; comment: string }) =>
+    api.post('operator_ratings/', data),
+};
+
+export const settingsService = {
+  getSettings: () => api.get('settings/'),
+  updateSettings: (data: any) => api.post('settings/', data),
 };
 
 export default api;

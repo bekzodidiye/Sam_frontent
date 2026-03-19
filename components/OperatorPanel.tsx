@@ -1,7 +1,9 @@
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { User, AppState, CheckIn, SimSale, DailyReport, Achievement } from '../types';
-import { Camera, MapPin, CheckCircle2, Send, Plus, History, Trash2, Smartphone, Upload, Image as ImageIcon, TrendingUp, Loader2, Edit3, AlertTriangle, RefreshCw, LogIn, LogOut, X, Trophy, Activity, ChevronLeft, ChevronRight, RotateCcw, BarChart3, Calendar, PlusCircle, Edit, Check, Users, ChevronDown, ExternalLink, Globe } from 'lucide-react';
+import L from 'leaflet';
+import { Maximize2, LayoutGrid, Award, Phone, CalendarDays, BarChart2, PackageSearch, FileText, LogIn as LogInIcon, LogOut as LogOutIcon, Clock } from 'lucide-react';
+import { Camera, MapPin, CheckCircle2, Send, Plus, History, Trash2, Smartphone, Upload, Image as ImageIcon, TrendingUp, Loader2, Edit3, AlertTriangle, RefreshCw, LogIn, LogOut, X, Trophy, Activity, ChevronLeft, ChevronRight, RotateCcw, BarChart3, Calendar, PlusCircle, Edit, Check, Users, ChevronDown, ExternalLink, Globe, Star } from 'lucide-react';
 import { getTodayStr, isDateMatch, getLatenessStatus, getEarlyDepartureStatus, getUzTime, formatUzTime, formatUzDateTime, calculateDistance } from '../utils';
 import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Cell, Legend, LabelList } from 'recharts';
 import * as XLSX from 'xlsx';
@@ -72,23 +74,25 @@ const AchievementCard: React.FC<{ achievement: Achievement }> = ({ achievement }
 interface OperatorPanelProps {
   user: User;
   state: AppState;
+  setState: any;
   activeTab: string;
-  language: 'uz' | 'ru' | 'en';
-  setState: React.Dispatch<React.SetStateAction<AppState>>;
+  language: Language;
   refreshData: () => Promise<void>;
+  isDarkMode: boolean;
 }
 
 const CustomAxisTick = ({ x, y, payload, index }: any) => {
   if (!payload) return null;
+  const isNumber = /^\d+$/.test(payload.value);
   return (
     <g transform={`translate(${x},${y})`}>
       <text
         x={0}
         y={0}
-        dy={index % 2 === 0 ? 10 : 25}
+        dy={isNumber ? (index % 2 === 0 ? 10 : 22) : 15}
         textAnchor="middle"
-        fill="rgba(255,255,255,0.3)"
-        fontSize={8}
+        fill="rgba(255,255,255,0.8)"
+        fontSize={isNumber ? 8 : 10}
         fontWeight={900}
       >
         {payload.value}
@@ -96,6 +100,38 @@ const CustomAxisTick = ({ x, y, payload, index }: any) => {
     </g>
   );
 };
+
+/* Styles for map markers (Ported from ManagerPanel) */
+const mapMarkerStyles = `
+  .map-marker-pin-tear {
+    width: 42px;
+    height: 42px;
+    background: #D4AF37;
+    border-radius: 50% 50% 50% 0;
+    transform: rotate(-45deg);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 3px solid #111111;
+    box-shadow: 0 0 25px rgba(212, 175, 55, 0.8), 0 5px 15px rgba(0, 0, 0, 0.5);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+  .pin-initials {
+    transform: rotate(45deg);
+    color: #111111;
+    font-weight: 900;
+    font-size: 13px;
+    letter-spacing: -0.02em;
+  }
+  .leaflet-container {
+    background: transparent !important;
+  }
+  .custom-staff-icon-pin {
+    background: transparent !important;
+    border: none !important;
+  }
+`;
+
 
 const getMediaUrl = (url: string | null | undefined) => {
   if (!url) return '';
@@ -107,7 +143,153 @@ const getMediaUrl = (url: string | null | undefined) => {
   return `${cleanBaseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
-const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, activeTab, language, refreshData }) => {
+const SingleLocationMap: React.FC<{
+  location: { lat: number; lng: number } | null,
+  endLocation?: { lat: number; lng: number } | null,
+  initials: string,
+  isDarkMode: boolean,
+  language: any
+}> = ({ location, endLocation, initials, isDarkMode, language }) => {
+  const mapRef = useRef<HTMLDivElement>(null);
+  const leafletMap = useRef<any>(null);
+  const tileLayerRef = useRef<any>(null);
+  const startMarkerRef = useRef<any>(null);
+  const endMarkerRef = useRef<any>(null);
+
+  useEffect(() => {
+    if (mapRef.current && !leafletMap.current && (location || endLocation)) {
+      const center = location || endLocation!;
+      leafletMap.current = L.map(mapRef.current, {
+        scrollWheelZoom: true,
+        dragging: true,
+        zoomControl: false,
+        attributionControl: false
+      }).setView([center.lat, center.lng], 15);
+
+      const tileUrl = isDarkMode
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      
+      tileLayerRef.current = L.tileLayer(tileUrl, { 
+        maxZoom: 20,
+        attribution: isDarkMode ? '&copy; CARTO' : '&copy; OpenStreetMap'
+      }).addTo(leafletMap.current);
+      L.control.zoom({ position: 'bottomright' }).addTo(leafletMap.current);
+
+      setTimeout(() => {
+        leafletMap.current?.invalidateSize();
+      }, 500);
+    }
+
+    if (leafletMap.current) {
+      if (location) {
+        const startIcon = L.divIcon({
+          className: 'custom-staff-icon-pin',
+          html: `<div class="map-marker-pin-tear"><div class="pin-initials">${initials}</div></div>`,
+          iconSize: [42, 42], iconAnchor: [21, 42]
+        });
+        if (startMarkerRef.current) {
+          startMarkerRef.current.setLatLng([location.lat, location.lng]);
+        } else {
+          startMarkerRef.current = L.marker([location.lat, location.lng], { icon: startIcon }).addTo(leafletMap.current);
+        }
+        leafletMap.current.setView([location.lat, location.lng], 16);
+      }
+    }
+  }, [location, endLocation, initials]);
+
+  useEffect(() => {
+    if (leafletMap.current && tileLayerRef.current) {
+      const tileUrl = isDarkMode
+        ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+      tileLayerRef.current.setUrl(tileUrl);
+    }
+  }, [isDarkMode]);
+
+  useEffect(() => {
+    return () => {
+      if (leafletMap.current) {
+        leafletMap.current.remove();
+        leafletMap.current = null;
+        startMarkerRef.current = null;
+        endMarkerRef.current = null;
+      }
+    };
+  }, []);
+
+  if (!location && !endLocation) return (
+    <div className="h-64 flex flex-col items-center justify-center text-white/30 italic font-black text-[10px] uppercase tracking-[0.2em] bg-brand-black rounded-[2.5rem] border-2 border-dashed border-white/5 p-10 text-center group transition-all hover:bg-white/[0.02] hover:border-brand-gold/20">
+      <div className="w-20 h-20 bg-brand-dark rounded-full flex items-center justify-center shadow-2xl mb-8 border border-white/5 relative">
+        <div className="absolute inset-0 bg-brand-gold/10 rounded-full animate-ping opacity-20" />
+        <div className="absolute inset-0 bg-brand-gold/5 rounded-full scale-150 blur-xl opacity-30" />
+        <MapPin className="w-10 h-10 text-brand-gold opacity-50 relative z-10 transition-transform group-hover:scale-110" />
+      </div>
+      <p className="max-w-[180px] leading-[1.6]">Joylashuv ma'lumotlari topilmadi</p>
+    </div>
+  );
+
+  return (
+    <div className="h-56 rounded-[2rem] overflow-hidden border border-white/10 shadow-inner relative group">
+      <div ref={mapRef} className="w-full h-full z-0" />
+      <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
+        <a
+          href={`https://www.google.com/maps?q=${(endLocation || location!).lat},${(endLocation || location!).lng}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="bg-brand-black/95 backdrop-blur-md p-2.5 rounded-xl shadow-lg border border-white/10 text-brand-gold hover:text-brand-gold/80 transition-all block hover:scale-105"
+          title="Google Maps'da ko'rish"
+        >
+          <ExternalLink className="w-4 h-4" />
+        </a>
+      </div>
+      <div className="absolute bottom-4 left-6 z-10 bg-brand-gold text-brand-black px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl ring-4 ring-brand-gold/30">
+        {t(language, 'live_location')}
+      </div>
+    </div>
+  );
+};
+
+const PhotoViewer: React.FC<{ photo: string; onClose: () => void }> = ({ photo, onClose }) => (
+  <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+    <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={onClose}></div>
+    <div className="relative z-10 max-w-[95vw] max-h-[90vh] flex flex-col items-center justify-center animate-in zoom-in-95">
+      <button
+        onClick={onClose}
+        className="absolute -top-14 right-0 p-3 bg-white/10 text-white rounded-full hover:bg-white/20 transition-all border border-white/20 z-50"
+      >
+        <X className="w-6 h-6" />
+      </button>
+      <img
+        src={getMediaUrl(photo)}
+        className="max-w-full max-h-[85vh] object-contain rounded-2xl shadow-2xl"
+        alt="Full view"
+      />
+      <div className="mt-4 bg-black/60 backdrop-blur-md text-white/90 text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full border border-white/10">
+        Yopish uchun ekranga bosing
+      </div>
+    </div>
+  </div>
+);
+
+const RefinedStatCard = ({ label, value, icon, color, onClick, isActive }: any) => (
+  <div
+    onClick={onClick}
+    className={`bg-brand-dark p-5 rounded-2xl border-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isActive ? 'ring-4 ring-brand-gold/10 border-brand-gold shadow-xl' : 'border-white/10 shadow-sm hover:border-brand-gold/30'}`}
+  >
+    <div className="flex items-center gap-4">
+      <div className={`${color} text-white p-3 rounded-xl shadow-md`}>{React.cloneElement(icon, { className: 'w-5 h-5' })}</div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 truncate ${isActive ? 'text-brand-gold' : 'text-white/40'}`}>{label}</p>
+        <p className="text-lg font-black text-white truncate w-full">
+          {typeof value === 'number' ? value.toLocaleString('uz-UZ') : value}
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
+const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, activeTab, language, refreshData, isDarkMode }) => {
   const formatLargeNumber = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '0';
@@ -117,6 +299,30 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
   };
 
   const today = getTodayStr();
+
+  const [viewingPhoto, setViewingPhoto] = useState<string | null>(null);
+  
+  const handleUpdateCheckIn = async (userId: string, date: string, updates: any) => {};
+  
+  const handleResetChart = () => {
+    setSelectedDay(null);
+    setMonitoringWeekOffset(0);
+    setMonitoringMonthOffset(0);
+    setMonitoringYear(new Date().getFullYear());
+  };
+
+  const getUserSalesCount = (userId: string, timeframe: string) => {
+    let sales = state.sales.filter(s => s.userId === userId);
+    if (timeframe === 'today') sales = sales.filter(s => s.date === today);
+    if (timeframe === 'month') sales = sales.filter(s => s.date.startsWith(today.substring(0, 7)));
+    if (timeframe === 'week') {
+      const weekAgo = new Date();
+      weekAgo.setDate(weekAgo.getDate() - 7);
+      sales = sales.filter(s => new Date(s.date) >= weekAgo);
+    }
+    return sales.reduce((sum, s) => sum + s.count + s.bonus, 0);
+  };
+
   const targetMonth = today.substring(0, 7);
   const monthlyTarget = state.monthlyTargets.find(t => t.month === targetMonth);
   const userSales = state.sales.filter(s => s.userId === user.id);
@@ -187,9 +393,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
   const [profileForm, setProfileForm] = useState({
     firstName: user.firstName,
     lastName: user.lastName,
-    nickname: user.nickname || '',
+    nickname: user.nickname || user.phone || '',
     phone: user.phone,
-    password: user.password,
+    password: user.password || '',
     photo: user.photo
   });
   const profilePhotoInputRef = useRef<HTMLInputElement>(null);
@@ -816,6 +1022,23 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
 
     switch (activeTab) {
       case 'rating': {
+        if (state.globalSettings?.rating_enabled === false) {
+           return (
+            <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 animate-in fade-in zoom-in duration-700">
+               <div className="w-24 h-24 bg-brand-gold/10 rounded-[2.5rem] flex items-center justify-center text-brand-gold mb-8 border border-brand-gold/20 shadow-2xl relative">
+                  <div className="absolute inset-0 bg-brand-gold/5 rounded-[2.5rem] animate-ping opacity-20" />
+                  <Trophy className="w-12 h-12 relative z-10 text-brand-gold shadow-2xl" />
+               </div>
+               <h2 className="text-3xl font-black text-white uppercase tracking-tighter mb-4 text-center">Reyting Tizimi</h2>
+               <p className="text-white/40 font-bold uppercase tracking-[0.2em] text-[10px] text-center max-w-[280px] leading-loose">
+                  Reyting tizimi oyning oxirida paydo bo'ladi.
+               </p>
+               <div className="mt-8 px-5 py-2.5 bg-white/5 rounded-xl border border-white/10">
+                  <span className="text-[9px] font-black text-brand-gold/60 uppercase tracking-widest">Yaqinda ochiladi</span>
+               </div>
+            </div>
+           );
+        }
         let startDate = new Date();
         let endDate = new Date();
         if (ratingTimeframe === 'today') {
@@ -1017,287 +1240,406 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
         );
       }
       case 'monitoring': {
+        const selectedUser = user;
+        const chartTimeframe = monitoringTimeframe;
+        const setChartTimeframe = setMonitoringTimeframe;
+        const weekOffset = monitoringWeekOffset;
+        const setWeekOffset = setMonitoringWeekOffset;
+        const monthOffset = monitoringMonthOffset;
+        const setMonthOffset = setMonitoringMonthOffset;
+        const selectedYear = monitoringYear;
+        const setSelectedYear = setMonitoringYear;
+        const currentChartData = monitoringChartData;
+        const userChartTotals = monitoringTotals;
+        const periodTotals = monitoringPeriodTotals;
+        const chartTitleLabel = monitoringCurrentPeriodLabel;
+        
         return (
           <div className="space-y-6 sm:space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
-            <div className="bg-brand-dark p-6 sm:p-10 rounded-[2rem] sm:rounded-[3rem] shadow-xl border border-white/10">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-6 sm:mb-10 gap-4 sm:gap-6">
-                <div className="flex flex-col gap-2">
-                  <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-3"><Activity className="w-6 h-6 sm:w-8 sm:h-8 text-brand-gold" /> Savdo Dinamikasi</h2>
-                </div>
-
-                <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4">
-                  <div className="flex flex-wrap gap-2 sm:gap-3">
-                    {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
-                      const count = monitoringPeriodTotals[company] || 0;
-                      const styles: any = {
-                        'Ucell': 'text-[#9b51e0] bg-[#9b51e0]/10 border-[#9b51e0]/20',
-                        'Uztelecom': 'text-[#009ee0] bg-[#009ee0]/10 border-[#009ee0]/20',
-                        'Mobiuz': 'text-[#eb1c24] bg-[#eb1c24]/10 border-[#eb1c24]/20',
-                        'Beeline': 'text-[#fdb913] bg-[#fdb913]/10 border-[#fdb913]/20'
-                      }[company];
-                      return (
-                        <span key={company} className={`text-[8px] sm:text-[10px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${styles}`}>
-                          {company}: {count}
-                        </span>
-                      );
-                    })}
-                  </div>
-                  <div className="flex p-1 bg-brand-black rounded-xl border border-white/10 w-full sm:w-auto overflow-x-auto">
-                    <button
-                      onClick={() => setMonitoringTimeframe('week')}
-                      className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'week' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
-                    >
-                      Hafta
-                    </button>
-                    <button
-                      onClick={() => setMonitoringTimeframe('month')}
-                      className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'month' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
-                    >
-                      {t(language, 'month')}
-                    </button>
-                    <button
-                      onClick={() => setMonitoringTimeframe('year')}
-                      className={`flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'year' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
-                    >
-                      {t(language, 'yearly')}
-                    </button>
-                    <button
-                      onClick={() => {
-                        const targetDate = selectedDay || getTodayStr();
-                        const dataToExport = state.sales.filter(s => s.userId === user.id && s.date === targetDate).map(s => ({
-                          'Kompaniya': s.company,
-                          'Tarif': s.tariff,
-                          'Soni': s.count,
-                          'Bonus': s.bonus,
-                          'Jami': s.count + s.bonus,
-                          'Vaqt': formatUzTime(s.timestamp)
-                        }));
-                        const ws = XLSX.utils.json_to_sheet(dataToExport);
-                        const wb = XLSX.utils.book_new();
-                        XLSX.utils.book_append_sheet(wb, ws, "Savdolar");
-                        XLSX.writeFile(wb, `savdolar_${targetDate}.xlsx`);
-                      }}
-                      className="flex-1 sm:flex-none px-3 sm:px-4 py-2 rounded-lg text-[9px] sm:text-[10px] font-black uppercase tracking-widest transition-all bg-green-500/10 text-green-500 hover:bg-green-500/20 border border-green-500/20 flex items-center gap-2"
-                    >
-                      <Upload className="w-3.5 h-3.5" /> Yuklab olish
-                    </button>
-                  </div>
-
-                  <div className="flex items-center gap-1 bg-brand-black p-1 rounded-xl border border-white/10">
-                    <button
-                      onClick={() => {
-                        if (monitoringTimeframe === 'week') setMonitoringWeekOffset(prev => prev - 1);
-                        else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev - 1);
-                        else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev - 1);
-                      }}
-                      className="p-2 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/40 hover:text-brand-gold"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="text-[10px] font-black text-brand-gold px-3 uppercase tracking-widest min-w-[100px] text-center">
-                      {monitoringCurrentPeriodLabel}
-                    </span>
-                    <button
-                      onClick={() => {
-                        if (monitoringTimeframe === 'week') setMonitoringWeekOffset(prev => prev + 1);
-                        else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev + 1);
-                        else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev + 1);
-                      }}
-                      className="p-2 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/40 hover:text-brand-gold"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
-                  {selectedDay && (
-                    <button
-                      onClick={() => setSelectedDay(null)}
-                      className="px-4 py-2 bg-blue-50 text-blue-600 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2 hover:bg-blue-100 transition shadow-sm focus:outline-none"
-                    >
-                      <RotateCcw className="w-3.5 h-3.5" /> {t(language, 'back_to_today')}
-                    </button>
-                  )}
-                </div>
+            {viewingPhoto && <PhotoViewer photo={viewingPhoto} onClose={() => setViewingPhoto(null)} />}
+            <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar no-scrollbar bg-brand-black">
+              <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
+                <RefinedStatCard
+                  label={t(language, 'today_sales')}
+                  value={getUserSalesCount(selectedUser.id, 'today')}
+                  icon={<Clock />}
+                  color="bg-brand-gold"
+                  isActive={chartTimeframe === 'week'}
+                  onClick={() => setChartTimeframe('week')}
+                />
+                <RefinedStatCard
+                  label={t(language, 'this_month')}
+                  value={getUserSalesCount(selectedUser.id, 'month')}
+                  icon={<CalendarDays />}
+                  color="bg-white/10"
+                  isActive={chartTimeframe === 'month'}
+                  onClick={() => setChartTimeframe('month')}
+                />
+                <RefinedStatCard
+                  label={t(language, 'phone')}
+                  value={selectedUser.phone}
+                  icon={<Phone />}
+                  color="bg-brand-gold"
+                />
+                <RefinedStatCard
+                  label={t(language, 'total')}
+                  value={getUserSalesCount(selectedUser.id, 'total')}
+                  icon={<Award />}
+                  color="bg-white/10"
+                  isActive={chartTimeframe === 'year'}
+                  onClick={() => setChartTimeframe('year')}
+                />
               </div>
-              <div className="h-[350px] w-full chart-wrapper">
-                <ResponsiveContainer width="100%" height="100%" style={{ outline: 'none' }}>
-                  <BarChart
-                    data={monitoringChartData}
-                    margin={{ top: 30, right: 10, left: 0, bottom: 40 }}
-                    style={{ outline: 'none' }}
-                    onClick={(e: any) => {
-                      if (e && e.activePayload && e.activePayload.length > 0) {
-                        const payload = e.activePayload[0].payload;
-                        if (payload && payload.fullDate) {
-                          setSelectedDay(payload.fullDate);
-                        }
-                      } else if (e && e.activeTooltipIndex !== undefined) {
-                        const payload = monitoringChartData[e.activeTooltipIndex];
-                        if (payload && payload.fullDate) {
-                          setSelectedDay(payload.fullDate);
-                        }
-                      }
-                    }}
-                  >
-                    <CartesianGrid strokeDasharray="4 4" vertical={false} stroke="#f1f5f9" opacity={0.1} />
-                    <XAxis
-                      dataKey="name"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={<CustomAxisTick />}
-                      interval={0}
-                    />
-                    <YAxis hide axisLine={false} tickLine={false} />
-                    <Tooltip
-                      content={({ active, payload, label }) => {
-                        if (active && payload && payload.length) {
-                          return (
-                            <div className="bg-brand-black p-4 rounded-2xl shadow-2xl border border-white/10">
-                              <p className="text-white font-bold mb-2 text-sm">{label}</p>
-                              <div className="flex flex-col gap-1">
-                                {payload.filter((p: any) => p.dataKey === 'simcards').map((p: any) => (
-                                  <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-brand-gold">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
-                                      <span>Simkartalar:</span>
-                                    </div>
-                                    <span>{p.value}</span>
-                                  </div>
-                                ))}
-                                {payload.filter((p: any) => p.dataKey === 'bonuses').map((p: any) => (
-                                  <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-[#10B981]">
-                                    <div className="flex items-center gap-2">
-                                      <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
-                                      <span>Bonuslar:</span>
-                                    </div>
-                                    <span>{p.value}</span>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        }
-                        return null;
-                      }}
-                      cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
-                    />
-                    <Legend
-                      verticalAlign="top"
-                      height={60}
-                      content={() => (
-                        <div className="flex flex-col items-center justify-center gap-4 mb-8">
-                          <div className="flex items-center gap-6">
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
-                              <span className="text-xs font-bold text-white/60 uppercase tracking-wider">Simkartalar: {monitoringTotals.totalSimcards}</span>
-                            </div>
-                            <div className="flex items-center gap-2">
-                              <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
-                              <span className="text-xs font-bold text-white/60 uppercase tracking-wider">Bonuslar: {monitoringTotals.totalBonuses}</span>
-                            </div>
+
+              <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                <div className="lg:col-span-2 space-y-8">
+                  <div className="bg-brand-dark rounded-[2rem] p-6 shadow-sm overflow-hidden border border-white/10 outline-none select-none no-outline-container">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-8 gap-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full sm:w-auto">
+                        <div className="flex flex-col gap-1">
+                          <h3 className="text-lg font-black text-white flex items-center gap-2">
+                            <BarChart2 className="w-5 h-5 text-brand-gold" />
+                            Sotuvlar Dinamikasi ({chartTitleLabel})
+                          </h3>
+                          <div className="flex flex-wrap gap-2 pl-0 sm:pl-7">
+                            {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
+                              const count = periodTotals[company] || 0;
+                              const styles: any = {
+                                'Ucell': 'text-[#9b51e0] bg-[#9b51e0]/10 border-[#9b51e0]/20',
+                                'Uztelecom': 'text-[#009ee0] bg-[#009ee0]/10 border-[#009ee0]/20',
+                                'Mobiuz': 'text-[#eb1c24] bg-[#eb1c24]/10 border-[#eb1c24]/20',
+                                'Beeline': 'text-[#fdb913] bg-[#fdb913]/10 border-[#fdb913]/20'
+                              }[company];
+                              return (
+                                <span key={company} className={`text-[9px] font-black uppercase tracking-widest px-2 py-1 rounded-lg border ${styles}`}>
+                                  {company}: {count}
+                                </span>
+                              );
+                            })}
                           </div>
                         </div>
-                      )}
-                    />
-                    <Bar
-                      name="Simkartalar"
-                      dataKey="simcards"
-                      fill="var(--theme-gold)"
-                      radius={[4, 4, 0, 0]}
-                      barSize={monitoringTimeframe === 'week' ? 20 : undefined}
-                      onClick={(data, index, e) => {
-                        if (e && e.stopPropagation) e.stopPropagation();
-                        if (data && data.fullDate) {
-                          setSelectedDay(prev => prev === data.fullDate ? null : data.fullDate);
-                        }
-                      }}
-                    >
-                      {monitoringChartData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={entry.fullDate === selectedDay ? '#fff' : 'var(--theme-gold)'} />
-                      ))}
-                      <LabelList dataKey="simcards" position="top" fill="var(--theme-gold)" fontSize={10} fontWeight={900} formatter={(val: number) => val > 0 ? val : ''} />
-                    </Bar>
-                    <Bar
-                      name="Bonuslar"
-                      dataKey="bonuses"
-                      fill="#10B981"
-                      radius={[4, 4, 0, 0]}
-                      barSize={monitoringTimeframe === 'week' ? 20 : undefined}
-                      onClick={(data, index, e) => {
-                        if (e && e.stopPropagation) e.stopPropagation();
-                        if (data && data.fullDate) {
-                          setSelectedDay(prev => prev === data.fullDate ? null : data.fullDate);
-                        }
-                      }}
-                    >
-                      {monitoringChartData.map((entry, index) => (
-                        <Cell key={`cell-bonus-${index}`} fill={entry.fullDate === selectedDay ? '#a7f3d0' : '#10B981'} />
-                      ))}
-                      <LabelList dataKey="bonuses" position="top" fill="#10B981" fontSize={10} fontWeight={900} formatter={(val: number) => val > 0 ? val : ''} />
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-
-            <div className="bg-brand-dark rounded-[3rem] shadow-xl border border-white/10 overflow-hidden">
-              <div className="p-8 border-b border-white/5 flex flex-col md:flex-row items-center justify-between bg-brand-black gap-6">
-                <div className="flex items-center gap-4 w-full md:w-auto">
-                  <div className="p-3 bg-brand-gold/10 rounded-2xl text-brand-gold shadow-sm"><Smartphone className="w-6 h-6" /></div>
-                  <h3 className="text-xl font-black text-white tracking-tight">
-                    {selectedDay || getTodayStr()} {t(language, 'daily_sales_title')}
-                  </h3>
-                </div>
-                <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-center md:justify-end">
-                  {(() => {
-                    const targetDate = selectedDay || getTodayStr();
-                    const daySales = state.sales.filter(s => s.userId === user.id && s.date === targetDate);
-                    return ['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
-                      const count = daySales.filter(s => s.company === company).reduce((acc, s) => acc + s.count + s.bonus, 0);
-                      const styles: any = {
-                        'Ucell': 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20',
-                        'Uztelecom': 'bg-[#009ee0]/10 text-[#009ee0] border-[#009ee0]/20',
-                        'Mobiuz': 'bg-[#eb1c24]/10 text-[#eb1c24] border-[#eb1c24]/20',
-                        'Beeline': 'bg-[#fdb913]/10 text-[#fdb913] border-[#fdb913]/20'
-                      }[company];
-                      return (
-                        <div key={company} className={`px-4 py-2 rounded-xl border ${styles} text-[10px] font-black uppercase tracking-widest shadow-sm`}>
-                          {company}: <span className="ml-1">{count}</span>
+                        <div className="flex items-center justify-between sm:justify-start gap-1 bg-brand-black p-1 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto mt-2 sm:mt-0">
+                          <button
+                            onClick={() => {
+                              if (chartTimeframe === 'week') setWeekOffset(prev => prev - 1);
+                              else if (chartTimeframe === 'month') setMonthOffset(prev => prev - 1);
+                              else if (chartTimeframe === 'year') setSelectedYear(prev => prev - 1);
+                            }}
+                            className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/30 hover:text-brand-gold focus:outline-none"
+                          >
+                            <ChevronLeft className="w-4 h-4" />
+                          </button>
+                          <span className="text-[10px] font-black text-brand-gold px-2 uppercase tracking-tighter whitespace-nowrap min-w-[120px] text-center">
+                            {chartTimeframe === 'week' ? (
+                              currentChartData.length === 7 ? (() => {
+                                const s = new Date(currentChartData[0].fullDate);
+                                const e = new Date(currentChartData[6].fullDate);
+                                const fmt = (d: Date) => `M${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getDate()).padStart(2, '0')}`;
+                                return `${fmt(s)} — ${fmt(e)}`;
+                              })() : '...'
+                            ) : chartTimeframe === 'month' ? (
+                              chartTitleLabel
+                            ) : (
+                              selectedYear
+                            )}
+                          </span>
+                          <button
+                            onClick={() => {
+                              if (chartTimeframe === 'week') setWeekOffset(prev => prev + 1);
+                              else if (chartTimeframe === 'month') setMonthOffset(prev => prev + 1);
+                              else if (chartTimeframe === 'year') setSelectedYear(prev => prev + 1);
+                            }}
+                            className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/30 hover:text-brand-gold focus:outline-none"
+                          >
+                            <ChevronRight className="w-4 h-4" />
+                          </button>
                         </div>
-                      );
-                    });
-                  })()}
-                </div>
-              </div>
-              <div className="p-0">
-                <div className="overflow-x-auto">
-                  <table className="w-full text-left border-collapse">
-                    <thead>
-                      <tr className="bg-brand-black">
-                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5">Kompaniya</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5">Tarif</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-center">Soni</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-center">Bonus</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-center">Jami</th>
-                        <th className="px-8 py-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 text-right">Vaqt</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-white/5">
+                      </div>
+                      <div className="flex items-center gap-3 w-full sm:w-auto mt-4 sm:mt-0">
+                        {(selectedDay || weekOffset !== 0 || monthOffset !== 0 || (chartTimeframe === 'year' && selectedYear !== new Date().getFullYear())) && (
+                          <button
+                            onClick={handleResetChart}
+                            className="w-full sm:w-auto px-4 py-2 bg-brand-gold/10 text-brand-gold rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center justify-center gap-2 hover:bg-brand-gold/20 transition shadow-sm focus:outline-none border border-brand-gold/20"
+                          >
+                            <RotateCcw className="w-3.5 h-3.5" /> {t(language, 'back_to_today')}
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                    <div className="h-72 border-none outline-none bg-brand-dark focus:outline-none focus:ring-0 chart-wrapper">
+                      <ResponsiveContainer width="100%" height="100%" style={{ border: 'none', outline: 'none' }}>
+                        <BarChart
+                          data={currentChartData}
+                          onClick={(e: any) => {
+                            if (e && e.activePayload && e.activePayload.length > 0) {
+                              const payload = e.activePayload[0].payload;
+                              if (payload && payload.fullDate) {
+                                setSelectedDay(payload.fullDate);
+                              }
+                            } else if (e && e.activeTooltipIndex !== undefined) {
+                              const payload = currentChartData[e.activeTooltipIndex];
+                              if (payload && payload.fullDate) {
+                                setSelectedDay(payload.fullDate);
+                              }
+                            }
+                          }}
+                          margin={{ top: 30, right: 10, left: 0, bottom: 40 }}
+                          style={{ border: 'none', outline: 'none' }}
+                        >
+                          <XAxis
+                            dataKey="name"
+                            axisLine={false}
+                            tickLine={false}
+                            tick={<CustomAxisTick />}
+                            interval={0}
+                          />
+                          <YAxis hide axisLine={false} tickLine={false} />
+                          <Tooltip
+                            content={({ active, payload, label }) => {
+                              if (active && payload && payload.length) {
+                                return (
+                                  <div className="bg-brand-black p-4 rounded-2xl shadow-2xl border border-white/10">
+                                    <p className="text-white font-bold mb-2 text-sm">{label}</p>
+                                    <div className="flex flex-col gap-1">
+                                      {payload.filter((p: any) => p.dataKey === 'simcards').map((p: any) => (
+                                        <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-brand-gold">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
+                                            <span>Simkartalar:</span>
+                                          </div>
+                                          <span>{p.value}</span>
+                                        </div>
+                                      ))}
+                                      {payload.filter((p: any) => p.dataKey === 'bonuses').map((p: any) => (
+                                        <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-[#10B981]">
+                                          <div className="flex items-center gap-2">
+                                            <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
+                                            <span>Bonuslar:</span>
+                                          </div>
+                                          <span>{p.value}</span>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              }
+                              return null;
+                            }}
+                            cursor={{ fill: 'rgba(255,255,255,0.05)', radius: 4 }}
+                          />
+                          <Legend
+                            verticalAlign="top"
+                            height={36}
+                            content={() => (
+                              <div className="flex items-center justify-start gap-6 pl-2">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
+                                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Simkartalar: {userChartTotals.totalSimcards}</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
+                                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Bonuslar: {userChartTotals.totalBonuses}</span>
+                                </div>
+                              </div>
+                            )}
+                          />
+
+                          <Bar
+                            name="Simkartalar"
+                            dataKey="simcards"
+                            fill="var(--theme-gold)"
+                            radius={[4, 4, 0, 0]}
+                            barSize={chartTimeframe === 'week' ? 20 : undefined}
+                          >
+                            <LabelList dataKey="simcards" position="top" fill="var(--theme-gold)" fontSize={10} fontWeight={900} formatter={(val: number) => val > 0 ? val : ''} />
+                          </Bar>
+                          <Bar
+                            name="Bonuslar"
+                            dataKey="bonuses"
+                            fill="#10B981"
+                            radius={[4, 4, 0, 0]}
+                            barSize={chartTimeframe === 'week' ? 20 : undefined}
+                          >
+                            <LabelList dataKey="bonuses" position="top" fill="#10B981" fontSize={10} fontWeight={900} formatter={(val: number) => val > 0 ? val : ''} />
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+
+                  <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm">
+                    <div className="p-6 border-b border-white/5 bg-brand-dark">
+                      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center gap-3">
+                            <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><Smartphone className="w-5 h-5" /></div>
+                            <h3 className="text-lg font-black text-white tracking-tight">
+                              {selectedDay ? (chartTimeframe === 'year' ? `${(() => {
+                                const d = new Date(selectedDay);
+                                const monthName = translations[language].month_names[d.getMonth()];
+                                return `${monthName} ${d.getFullYear()}`;
+                              })()} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
+                            </h3>
+                          </div>
+                          
+                          <div className="flex flex-wrap items-center gap-3 pl-0 lg:pl-10">
+                            {(() => {
+                              const targetDate = selectedDay || today;
+                              let daySales = [];
+                              if (selectedDay) {
+                                if (chartTimeframe === 'year') {
+                                  const monthPrefix = selectedDay.substring(0, 7);
+                                  daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                                } else {
+                                  daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
+                                }
+                              } else if (chartTimeframe === 'month') {
+                                const d = new Date();
+                                d.setDate(1);
+                                d.setMonth(d.getMonth() + monthOffset);
+                                const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                              } else {
+                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
+                              }
+    
+                              const companies = [
+                                { name: 'Ucell', color: 'border-[#9b51e0]/20 text-[#9b51e0] bg-[#9b51e0]/10' },
+                                { name: 'Uztelecom', color: 'border-[#009ee0]/20 text-[#009ee0] bg-[#009ee0]/10' },
+                                { name: 'Mobiuz', color: 'border-[#eb1c24]/20 text-[#eb1c24] bg-[#eb1c24]/10' },
+                                { name: 'Beeline', color: 'border-[#fdb913]/20 text-[#fdb913] bg-[#fdb913]/10' }
+                              ];
+    
+                              return companies.map(c => {
+                                const count = daySales.filter(s => s.company === c.name).reduce((acc, s) => acc + s.count + s.bonus, 0);
+                                return (
+                                  <div key={c.name} className={`px-4 py-2 rounded-xl border-2 ${c.color} font-black text-[10px] flex items-center gap-3 shadow-sm hover:scale-105 transition-transform duration-300`}>
+                                    <span className="uppercase tracking-widest opacity-60">{c.name}:</span>
+                                    <span className="text-sm">{count}</span>
+                                  </div>
+                                );
+                              });
+                            })()}
+                          </div>
+                        </div>
+
+                        <div className="flex items-center self-end lg:self-center">
+                          {selectedDay && (
+                            <div className="flex items-center gap-3 text-[10px] font-black text-brand-gold bg-brand-gold/10 px-4 py-2 rounded-2xl uppercase tracking-widest shadow-xl border border-brand-gold/20 animate-in zoom-in-95 duration-500">
+                              <Calendar className="w-4 h-4" /> Tanlangan kun
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                    {/* Desktop Table View */}
+                    <div className="hidden sm:block overflow-x-auto custom-scrollbar">
+                      <table className="w-full text-left min-w-[600px]">
+                        <thead className="bg-brand-black text-[8px] sm:text-[9px] font-black text-white/30 uppercase tracking-widest">
+                          <tr>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4">Kompaniya</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4">Tarif</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Soni</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Bonus</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">{t(language, 'total')}</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-right">Vaqt</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {(() => {
+                            let daySales = [];
+                            if (selectedDay) {
+                              if (chartTimeframe === 'year') {
+                                const monthPrefix = selectedDay.substring(0, 7);
+                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                              } else {
+                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
+                              }
+                            } else if (chartTimeframe === 'month') {
+                              const d = new Date();
+                              d.setDate(1);
+                              d.setMonth(d.getMonth() + monthOffset);
+                              const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                            } else {
+                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
+                            }
+
+                            if (daySales.length === 0) {
+                              return (
+                                <tr>
+                                  <td colSpan={6} className="px-4 sm:px-8 py-10 sm:py-20 text-center">
+                                    <div className="flex flex-col items-center gap-3 sm:gap-4">
+                                      <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/5 rounded-full flex items-center justify-center text-white/10">
+                                        <PackageSearch className="w-6 h-6 sm:w-10 sm:h-10" />
+                                      </div>
+                                      <p className="text-xs sm:text-sm font-black text-white/20 italic">Bu davrda hech nima sotilmagan</p>
+                                    </div>
+                                  </td>
+                                </tr>
+                              );
+                            }
+                            return daySales.sort((a, b) => {
+                              const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
+                              return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
+                            }).map(sale => (
+                              <tr key={sale.id} className="hover:bg-white/5 transition group">
+                                <td className="px-4 sm:px-8 py-4 sm:py-5">
+                                  <span className={`px-2 sm:px-3 py-1 rounded-lg text-[8px] sm:text-[10px] font-black uppercase transition-colors border whitespace-nowrap ${sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20 group-hover:bg-[#9b51e0] group-hover:text-white' :
+                                    sale.company === 'Uztelecom' ? 'bg-[#009ee0]/10 text-[#009ee0] border-[#009ee0]/20 group-hover:bg-[#009ee0] group-hover:text-white' :
+                                      sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24] border-[#eb1c24]/20 group-hover:bg-[#eb1c24] group-hover:text-white' :
+                                        sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913] border-[#fdb913]/20 group-hover:bg-[#fdb913] group-hover:text-black' :
+                                          'bg-brand-gold/10 text-brand-gold border-brand-gold/20 group-hover:bg-brand-gold group-hover:text-brand-black'
+                                    }`}>
+                                    {sale.company}
+                                  </span>
+                                </td>
+                                <td className="px-4 sm:px-8 py-4 sm:py-5 text-xs sm:text-sm font-bold text-white/70">{sale.tariff}</td>
+                                <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-brand-gold">{sale.count.toLocaleString()}</td>
+                                <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-white/70">{sale.bonus.toLocaleString()}</td>
+                                <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-black text-base sm:text-lg text-brand-gold">{(sale.count + sale.bonus).toLocaleString()}</td>
+                                <td className="px-4 sm:px-8 py-4 sm:py-5 text-right text-[9px] sm:text-[10px] font-bold text-white/20">
+                                  <div className="flex flex-col items-end">
+                                    <span>{formatUzTime(sale.timestamp)}</span>
+                                    <span className="text-[7px] sm:text-[8px] text-white/10">{new Date(sale.timestamp).toLocaleDateString()}</span>
+                                  </div>
+                                </td>
+                              </tr>
+                            ));
+                          })()}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    {/* Mobile Card View */}
+                    <div className="sm:hidden p-4 space-y-4">
                       {(() => {
-                        const targetDate = selectedDay || getTodayStr();
-                        const daySales = state.sales.filter(s => s.userId === user.id && s.date === targetDate);
+                        let daySales = [];
+                        if (selectedDay) {
+                          if (chartTimeframe === 'year') {
+                            const monthPrefix = selectedDay.substring(0, 7);
+                            daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                          } else {
+                            daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
+                          }
+                        } else if (chartTimeframe === 'month') {
+                          const d = new Date();
+                          d.setDate(1);
+                          d.setMonth(d.getMonth() + monthOffset);
+                          const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                        } else {
+                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
+                        }
 
                         if (daySales.length === 0) {
                           return (
-                            <tr>
-                              <td colSpan={6} className="px-8 py-20 text-center">
-                                <div className="flex flex-col items-center gap-4 opacity-40">
-                                  <div className="w-16 h-16 bg-white/5 rounded-3xl flex items-center justify-center text-white/20">
-                                    <History className="w-8 h-8" />
-                                  </div>
-                                  <p className="text-sm font-black text-white/30 italic">Bu kunda hech nima sotilmagan</p>
-                                </div>
-                              </td>
-                            </tr>
+                            <div className="flex flex-col items-center gap-3 py-10 text-center">
+                              <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-white/10">
+                                <PackageSearch className="w-6 h-6" />
+                              </div>
+                              <p className="text-xs font-black text-white/20 italic">Bu davrda hech nima sotilmagan</p>
+                            </div>
                           );
                         }
 
@@ -1305,33 +1647,384 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                           const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
                           return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
                         }).map(sale => (
-                          <tr key={sale.id} className="hover:bg-white/5 transition-colors group">
-                            <td className="px-8 py-5">
-                              <span className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase ${sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0]' :
-                                sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24]' :
-                                  sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913]' :
-                                    'bg-[#009ee0]/10 text-[#009ee0]'
+                          <div key={sale.id} className="bg-brand-black p-5 rounded-2xl border border-white/5 hover:border-brand-gold/30 transition-all shadow-sm">
+                            <div className="flex items-center justify-between mb-4">
+                              <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border ${sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20' :
+                                sale.company === 'Uztelecom' ? 'bg-[#009ee0]/10 text-[#009ee0] border-[#009ee0]/20' :
+                                  sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24] border-[#eb1c24]/20' :
+                                    sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913] border-[#fdb913]/20' :
+                                      'bg-brand-gold/10 text-brand-gold border-brand-gold/20'
                                 }`}>
                                 {sale.company}
                               </span>
-                            </td>
-                            <td className="px-8 py-5 font-bold text-white/70">{sale.tariff}</td>
-                            <td className="px-8 py-5 text-center font-black text-white">{sale.count}</td>
-                            <td className="px-8 py-5 text-center font-black text-green-500">+{sale.bonus}</td>
-                            <td className="px-8 py-5 text-center">
-                              <span className="px-3 py-1 bg-white/10 rounded-lg font-black text-white text-xs">
-                                {sale.count + sale.bonus}
-                              </span>
-                            </td>
-                            <td className="px-8 py-5 text-right text-[10px] font-black text-gray-400 uppercase tracking-widest">
-                              {formatUzTime(sale.timestamp)}
-                            </td>
-                          </tr>
+                              <div className="text-right">
+                                <p className="text-[9px] font-black text-brand-gold bg-brand-gold/10 px-2 py-1 rounded-lg">
+                                  {formatUzTime(sale.timestamp)}
+                                </p>
+                                <p className="text-[7px] font-bold text-white/20 mt-0.5">{new Date(sale.timestamp).toLocaleDateString()}</p>
+                              </div>
+                            </div>
+
+                            <div className="mb-4">
+                              <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Tarif</p>
+                              <p className="text-sm font-bold text-white">{sale.tariff}</p>
+                            </div>
+
+                            <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                              <div className="text-center">
+                                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Soni</p>
+                                <p className="text-sm font-black text-brand-gold">{sale.count.toLocaleString()}</p>
+                              </div>
+                              <div className="text-center border-l border-white/5">
+                                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Bonus</p>
+                                <p className="text-sm font-black text-white/70">{sale.bonus.toLocaleString()}</p>
+                              </div>
+                              <div className="text-center border-l border-white/5">
+                                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Jami</p>
+                                <p className="text-sm font-black text-brand-gold">{(sale.count + sale.bonus).toLocaleString()}</p>
+                              </div>
+                            </div>
+                          </div>
                         ));
                       })()}
-                    </tbody>
-                  </table>
+                    </div>
+                  </div>
+
+                  {/* OPTIMIZED DAILY REPORT DISPLAY MATCHING SCREENSHOT */}
+                  <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm">
+                    <div className="p-6 border-b border-white/5 bg-brand-dark">
+                      <div className="flex items-center gap-3">
+                        <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><FileText className="w-5 h-5" /></div>
+                        <h3 className="text-lg font-black text-white tracking-tight">
+                          {t(language, 'daily_report')} {selectedDay ? `(${selectedDay})` : `(${t(language, 'today')})`}
+                        </h3>
+                      </div>
+                    </div>
+                    <div className="p-8">
+                      {(() => {
+                        const targetDate = selectedDay || today;
+                        const dailyReport = state.reports.find(r => r.userId === selectedUser.id && r.date === targetDate);
+
+                        if (!dailyReport) {
+                          return (
+                            <div className="flex flex-col items-center py-10 text-center gap-4">
+                              <div className="w-14 h-14 bg-white/5 rounded-full flex items-center justify-center text-white/10">
+                                <AlertTriangle className="w-8 h-8" />
+                              </div>
+                              <p className="text-sm font-black text-white/20 italic">Bu kun uchun hisobot yuborilmagan</p>
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="space-y-10">
+                            {dailyReport.photos && dailyReport.photos.length > 0 && (
+                              <div className="space-y-5">
+                                <div className="flex items-center gap-3 px-2">
+                                  <div className="w-7 h-7 bg-brand-gold/10 rounded-lg flex items-center justify-center">
+                                    <LayoutGrid className="w-4 h-4 text-brand-gold" />
+                                  </div>
+                                  <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">ILOVA QILINGAN RASMLAR ({dailyReport.photos.length})</p>
+                                </div>
+                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                  {dailyReport.photos.map((photo, idx) => (
+                                    <div
+                                      key={idx}
+                                      className="relative group cursor-pointer overflow-hidden rounded-[2.2rem] border-4 border-white/10 shadow-xl aspect-square transition-all hover:scale-[1.02]"
+                                      onClick={() => setViewingPhoto(photo)}
+                                    >
+                                      <img src={getMediaUrl(photo)} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" referrerPolicy="no-referrer" />
+                                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                        <div className="bg-white/20 backdrop-blur-md p-3 rounded-full border border-white/30 text-white scale-75 group-hover:scale-100 transition-all">
+                                          <Maximize2 className="w-6 h-6" />
+                                        </div>
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+
+                            <div className="bg-brand-black rounded-[2rem] border border-white/10 p-8 shadow-sm flex flex-col gap-6">
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
+                                  <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Kunlik Xulosa</span>
+                                </div>
+                                <span className="text-[10px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-full border border-brand-gold/20">
+                                  {formatUzTime(dailyReport.timestamp)}
+                                </span>
+                              </div>
+                              <p className="text-white font-bold text-xl sm:text-2xl leading-relaxed tracking-tight break-words">
+                                {dailyReport.summary}
+                              </p>
+                            </div>
+                          </div>
+                        );
+                      })()}
+                    </div>
+                  </div>
                 </div>
+
+                <div className="space-y-8">
+                  <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm focus:outline-none">
+                    <h3 className="p-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 flex items-center justify-between">
+                      <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-brand-gold" /> {selectedDay || today} DAVOMAT</div>
+                      {(() => {
+                        const date = selectedDay || today;
+                        const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
+                        const workingHoursStr = typeof ci?.workingHours === 'string' ? ci.workingHours : (typeof selectedUser.workingHours === 'string' ? selectedUser.workingHours : null);
+                        return workingHoursStr ? <span className="bg-brand-black px-2 py-1 rounded-md text-white/50 border border-white/10">{workingHoursStr.replace(/\s*(AM|PM)/gi, '')}</span> : null;
+                      })()}
+                    </h3>
+                    <div className="p-6 space-y-4">
+                      {(() => {
+                        const date = selectedDay || today;
+                        const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
+                        const co = state.reports.find(r => r.userId === selectedUser.id && r.date === date);
+                        const workingHours = ci?.workingHours || selectedUser.workingHours;
+                        const lateness = ci ? getLatenessStatus(ci.timestamp, workingHours) : null;
+                        const earlyDeparture = co ? getEarlyDepartureStatus(co.timestamp, workingHours) : null;
+
+                        const arrivalCardStyle = ci
+                          ? (lateness ? 'bg-red-500/10 border-red-500/30' : 'bg-green-500/10 border-green-500/20')
+                          : 'bg-red-500/5 border-red-500/10';
+
+                        const departureCardStyle = co
+                          ? (earlyDeparture ? 'bg-orange-500/10 border-orange-500/30' : 'bg-blue-500/10 border-blue-500/20')
+                          : 'bg-white/5 border-white/10 opacity-60';
+
+                        return (
+                          <>
+                            <div className={`p-6 rounded-[2rem] border-2 transition-all duration-300 flex flex-col gap-2 shadow-sm ${arrivalCardStyle}`}>
+                              <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-2xl shadow-md ${ci ? (lateness ? 'bg-red-600 text-white' : 'bg-green-600 text-white') : 'bg-red-600 text-white'}`}><LogInIcon className="w-5 h-5" /></div>
+                                <div className="flex-1">
+                                  <div className="flex justify-between items-start">
+                                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Kelish</p>
+                                    <div className="flex items-center gap-2">
+                                      {lateness && (
+                                        <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">LATE</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {editingTime?.type === 'checkIn' ? (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <input
+                                        type="time"
+                                        value={newTime}
+                                        lang="en-GB"
+                                        step="60"
+                                        onFocus={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
+                                        onClick={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
+                                        onChange={e => setNewTime(e.target.value)}
+                                        className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:border-brand-gold text-white"
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          if (newTime) {
+                                            const [h, m] = newTime.split(':').map(Number);
+                                            const d = new Date(ci!.timestamp);
+                                            d.setHours(h, m);
+                                            handleUpdateCheckIn(selectedUser.id, date, { timestamp: d.toISOString() });
+                                            setEditingTime(null);
+                                          }
+                                        }}
+                                        className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition shadow-sm"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                      <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
+                                    </div>
+                                  ) : (
+                                    <p className={`text-2xl font-black leading-none mt-1 ${ci ? (lateness ? 'text-red-500' : 'text-white') : 'text-red-500/40'}`}>
+                                      {ci ? formatUzTime(ci.timestamp) : t(language, 'not_come')}
+                                    </p>
+                                  )}
+                                  {lateness && editingTime?.type !== 'checkIn' && (
+                                    <div className="mt-2 pt-2 border-t border-red-500/20 flex items-center gap-1.5 text-red-500 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
+                                      <AlertTriangle className="w-3.5 h-3.5" />
+                                      <span>{lateness.durationStr} kechikish</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                            <div className={`p-6 rounded-[2rem] border-2 flex flex-col gap-2 shadow-sm transition-all ${departureCardStyle}`}>
+                              <div className="flex items-center gap-4">
+                                <div className={`p-3 rounded-2xl shadow-md ${co ? (earlyDeparture ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white') : 'bg-white/10 text-white/30'}`}><LogOutIcon className="w-5 h-5" /></div>
+                                <div className="flex-1">
+                                  <div className="flex justify-between items-start">
+                                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Ketish</p>
+                                    <div className="flex items-center gap-2">
+                                      {earlyDeparture && (
+                                        <div className="bg-orange-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">EARLY</div>
+                                      )}
+                                    </div>
+                                  </div>
+                                  {editingTime?.type === 'checkOut' ? (
+                                    <div className="flex items-center gap-2 mt-1">
+                                      <input
+                                        type="time"
+                                        value={newTime}
+                                        lang="en-GB"
+                                        step="60"
+                                        onFocus={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
+                                        onClick={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
+                                        onChange={e => setNewTime(e.target.value)}
+                                        className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-lg font-bold w-32 outline-none focus:border-brand-gold text-white"
+                                        autoFocus
+                                      />
+                                      <button
+                                        onClick={() => {
+                                          if (newTime) {
+                                            const [h, m] = newTime.split(':').map(Number);
+                                            const d = new Date(co!.timestamp);
+                                            d.setHours(h, m);
+                                            handleUpdateReport(selectedUser.id, date, { timestamp: d.toISOString() });
+                                            setEditingTime(null);
+                                          }
+                                        }}
+                                        className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition shadow-sm"
+                                      >
+                                        <Check className="w-4 h-4" />
+                                      </button>
+                                      <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-4 h-4" /></button>
+                                    </div>
+                                  ) : (
+                                    <p className={`text-2xl font-black leading-none mt-1 ${co ? (earlyDeparture ? 'text-orange-500' : 'text-white') : 'text-white/20'}`}>
+                                      {co ? formatUzTime(co.timestamp) : 'Hali ketmagan'}
+                                    </p>
+                                  )}
+                                  {earlyDeparture && editingTime?.type !== 'checkOut' && (
+                                    <div className="mt-2 pt-2 border-t border-orange-500/20 flex items-center gap-1.5 text-orange-500 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
+                                      <AlertTriangle className="w-3.5 h-3.5" />
+                                      <span>{earlyDeparture.durationStr} erta ketish</span>
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </>
+                        );
+                      })()}
+                    </div>
+                  </div>
+
+                  <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
+                    <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <ImageIcon className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI FOTO' : 'OXIRGI FOTO'}
+                    </h3>
+                    {(() => {
+                      const targetDate = selectedDay || today;
+                      const dayCi = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, targetDate));
+                      return dayCi ? (
+                        <div
+                          className="relative group cursor-pointer overflow-hidden rounded-[1.5rem]"
+                          onClick={() => setViewingPhoto(dayCi.photo)}
+                        >
+                          <img src={getMediaUrl(dayCi.photo)} className="w-full h-40 object-cover shadow-sm border border-white/5 group-hover:scale-105 transition-transform duration-500" referrerPolicy="no-referrer" />
+                          <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                            <div className="bg-white/20 backdrop-blur-md p-3 rounded-full border border-white/30 text-white scale-90 group-hover:scale-100 transition-transform">
+                              <Maximize2 className="w-5 h-5" />
+                            </div>
+                          </div>
+                        </div>
+                      ) : (
+                        <div className="h-40 flex items-center justify-center text-white/20 italic font-black text-xs uppercase tracking-widest bg-brand-black rounded-[1.5rem] border-2 border-dashed border-white/10">
+                          {selectedDay ? 'Bu kunda foto yo\'q' : 'Hali foto yo\'q'}
+                        </div>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
+                    <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
+                      <MapPin className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI JOYLAHUV' : 'OXIRGI JOYLAHUV'}
+                    </h3>
+                    {(() => {
+                      const targetDate = selectedDay || today;
+                      const dayCi = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, targetDate));
+                      const dayReport = state.reports.find(r => r.userId === selectedUser.id && r.date === targetDate);
+
+                      let startLoc = (dayCi?.location_lat && dayCi?.location_lng)
+                        ? { lat: dayCi.location_lat, lng: dayCi.location_lng }
+                        : null;
+
+                      let endLoc = (dayReport?.locationLat && dayReport?.locationLng)
+                        ? { lat: dayReport.locationLat, lng: dayReport.locationLng }
+                        : null;
+
+                      // Fallback to absolute last location if today is empty
+                      if (!startLoc && !endLoc && !selectedDay) {
+                        const sortedCis = [...state.checkIns]
+                          .filter(c => c.userId === selectedUser.id && c.location_lat && c.location_lng)
+                          .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+                        if (sortedCis[0]) {
+                          startLoc = { lat: sortedCis[0].location_lat, lng: sortedCis[0].location_lng };
+                        }
+                        
+                        const sortedReports = [...state.reports]
+                          .filter(r => r.userId === selectedUser.id && r.locationLat && r.locationLng)
+                          .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+                        if (sortedReports[0]) {
+                           endLoc = { lat: sortedReports[0].locationLat, lng: sortedReports[0].locationLng };
+                        }
+                      }
+
+                      // CRITICAL: If only one is available, force it into GOLD marker
+                      if (!startLoc && endLoc) {
+                        startLoc = endLoc;
+                        endLoc = null;
+                      }
+
+                      const initials = `${selectedUser.firstName?.[0] || ''}${selectedUser.lastName?.[0] || ''}`.toUpperCase();
+                      return <SingleLocationMap location={startLoc || endLoc} initials={initials} isDarkMode={isDarkMode} language={language} />;
+                    })()}
+                  </div>
+
+                  {(() => {
+                    const targetDate = selectedDay || today;
+                    const rating = state.operatorRatings?.find(r => r.operatorId === user.id && r.date === targetDate);
+                    if (!rating) return null;
+                    return (
+                      <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm animate-in slide-in-from-bottom duration-500">
+                        <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
+                          <Star className="w-4 h-4 text-brand-gold animate-bounce" /> MENEJER BAHOSI
+                        </h3>
+                        <div className="flex flex-col gap-3">
+                          <div className="flex items-center gap-1.5 p-3 bg-brand-black/50 rounded-2xl w-fit">
+                            {[1, 2, 3, 4, 5].map(s => (
+                              <Star 
+                                key={s} 
+                                className={`w-5 h-5 transition-all duration-300 ${s <= rating.stars ? 'text-brand-gold fill-brand-gold scale-110 drop-shadow-[0_0_8px_rgba(251,191,36,0.5)]' : 'text-white/5'}`} 
+                              />
+                            ))}
+                          </div>
+                          {rating.comment && (
+                            <div className="relative p-5 bg-brand-gold/5 rounded-[1.5rem] border border-brand-gold/10">
+                              <p className="text-white font-medium text-sm leading-relaxed italic">
+                                "{rating.comment}"
+                              </p>
+                            </div>
+                          )}
+                          <div className="flex items-center gap-2 mt-2">
+                            <div className="w-6 h-6 rounded-full bg-brand-gold/10 flex items-center justify-center text-[10px] font-black text-brand-gold border border-brand-gold/20">
+                              {rating.ratedByName?.[0]}
+                            </div>
+                            <p className="text-[10px] font-black text-white/30 uppercase tracking-widest">
+                              Menejer: <span className="text-white/60">{rating.ratedByName}</span> • {formatUzTime(rating.timestamp)}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  
+                  <style>{mapMarkerStyles}</style>
+                </div>
+
               </div>
             </div>
           </div>
@@ -1510,30 +2203,22 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                     </button>
                   </div>
 
-                  <div className="p-8 space-y-6">
-                    <div>
-                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">So'rov matni</label>
-                      <textarea
-                        className="w-full p-6 bg-brand-black border border-white/10 rounded-[2rem] text-sm font-medium text-white focus:border-brand-gold outline-none transition shadow-inner resize-none"
-                        style={{ height: '120px' }}
-                        placeholder="Qaysi simkartalar va qancha kerakligini yozing..."
-                        value={simRequestText}
-                        onChange={(e) => setSimRequestText(e.target.value)}
-                        autoFocus
-                      />
+                  <div className="p-12 flex flex-col items-center justify-center text-center space-y-6">
+                    <div className="w-20 h-20 bg-brand-gold/10 rounded-3xl flex items-center justify-center text-brand-gold border border-brand-gold/20 relative">
+                      <div className="absolute inset-0 bg-brand-gold/5 rounded-3xl animate-ping opacity-20" />
+                      <Smartphone className="w-10 h-10 relative z-10" />
                     </div>
-
-                    <button
-                      onClick={() => {
-                        if (!simRequestText.trim()) return;
-                        handleSendMessage(`SIMKARTA SO'ROVI: ${simRequestText}`);
-                        setIsSimRequestModalOpen(false);
-                        setSimRequestText('');
-                        console.log("So'rov muvaffaqiyatli yuborildi!");
-                      }}
-                      className="w-full py-5 bg-indigo-600 text-white rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-indigo-100 hover:bg-indigo-700 active:scale-95 transition-all flex items-center justify-center gap-3"
+                    <div className="space-y-2">
+                       <h3 className="text-2xl font-black text-white uppercase tracking-tight">Tez Orada</h3>
+                       <p className="text-white/40 font-bold uppercase tracking-widest text-[10px] leading-relaxed max-w-[240px]">
+                          Simkarta so'rov tizimi tez orada ishga tushadi. Iltimos kuting.
+                       </p>
+                    </div>
+                    <button 
+                       onClick={() => setIsSimRequestModalOpen(false)}
+                       className="w-full py-4 bg-white/5 hover:bg-white/10 text-white/60 rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] border border-white/5 transition-all"
                     >
-                      So'rovni yuborish <Send className="w-4 h-4" />
+                       Tushunarli
                     </button>
                   </div>
                 </div>
@@ -1543,116 +2228,19 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
         );
       }
       case 'messages': {
-        const myMessages = state.messages.filter(m =>
-          !m.recipientId ||
-          m.recipientId === 'all' ||
-          m.recipientId === user.id ||
-          m.senderId === user.id
-        ).sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-
         return (
-          <div className="space-y-6 animate-in fade-in max-w-4xl mx-auto py-8 px-4">
-            {isSendMessageModalOpen && (
-              <div className="fixed inset-0 z-[150] flex items-center justify-center p-4 animate-in fade-in duration-300">
-                <div className="absolute inset-0 bg-gray-900/60 backdrop-blur-md" onClick={() => setIsSendMessageModalOpen(false)}></div>
-                <div className="bg-brand-dark w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
-                  <div className="p-8 border-b border-white/5 flex items-center justify-between bg-brand-black">
-                    <div className="flex items-center gap-3">
-                      <div className="p-3 bg-brand-gold text-brand-black rounded-2xl shadow-lg">
-                        <Send className="w-5 h-5" />
-                      </div>
-                      <div>
-                        <h3 className="text-xl font-black text-white tracking-tight">{t(language, 'send_message')}</h3>
-                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">{t(language, 'write_to_manager')}</p>
-                      </div>
-                    </div>
-                    <button onClick={() => setIsSendMessageModalOpen(false)} className="p-2 bg-brand-black rounded-xl text-white/40 hover:text-white transition shadow-sm border border-white/10">
-                      <X className="w-5 h-5" />
-                    </button>
-                  </div>
-
-                  <div className="p-8 space-y-6">
-                    <div>
-                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-2 ml-1">{t(language, 'message_text')}</label>
-                      <textarea
-                        className="w-full p-6 bg-brand-black border border-white/10 rounded-[2rem] text-sm font-medium text-white focus:border-brand-gold outline-none transition shadow-inner"
-                        rows={4}
-                        placeholder={t(language, 'type_message')}
-                        value={messageText}
-                        onChange={(e) => setMessageText(e.target.value)}
-                        autoFocus
-                      />
-                    </div>
-
-                    <button
-                      onClick={() => {
-                        if (!messageText.trim()) return;
-                        handleSendMessage(messageText);
-                        setIsSendMessageModalOpen(false);
-                        setMessageText('');
-                        console.log("Xabar muvaffaqiyatli yuborildi!");
-                      }}
-                      className="w-full py-5 gold-gradient text-brand-black rounded-[2rem] font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-3"
-                    >
-                      {t(language, 'send_message')} <Send className="w-4 h-4" />
-                    </button>
-                  </div>
-                </div>
-              </div>
-            )}
-            <div className="flex items-center justify-between mb-8">
-              <h2 className="text-3xl font-black text-gray-800 tracking-tight">{t(language, 'message_center')}</h2>
-              <button
-                onClick={() => {
-                  setIsSendMessageModalOpen(true);
-                  setMessageText('');
-                }}
-                className="px-6 py-3 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-              >
-                <Send className="w-4 h-4" />
-                {t(language, 'send_message')}
-              </button>
+          <div className="min-h-[60vh] flex flex-col items-center justify-center p-8 animate-in fade-in zoom-in duration-700">
+            <div className="w-24 h-24 bg-brand-gold/10 rounded-[2.5rem] flex items-center justify-center text-brand-gold mb-8 border border-brand-gold/20 shadow-2xl relative">
+              <div className="absolute inset-0 bg-brand-gold/5 rounded-[2.5rem] animate-ping opacity-20" />
+              <div className="absolute inset-0 bg-brand-gold/5 rounded-[2.5rem] scale-150 blur-xl opacity-30" />
+              <Send className="w-10 h-10 relative z-10" />
             </div>
-
-            <div className="grid grid-cols-1 gap-4">
-              {myMessages.length > 0 ? (
-                myMessages.map(m => (
-                  <div
-                    key={m.id}
-                    className={`p-6 rounded-[2.5rem] border transition-all relative ${m.isRead || m.senderId === user.id ? 'bg-brand-dark border-white/10' : 'bg-red-500/10 border-red-500/30 shadow-lg shadow-red-500/5'}`}
-                    onClick={() => !m.isRead && m.senderId !== user.id && markMessageAsRead(m.id)}
-                  >
-                    <div className="flex justify-between items-start mb-4">
-                      <div className="flex items-center gap-3">
-                        <div className={`w-10 h-10 rounded-xl flex items-center justify-center font-black text-xs ${m.senderRole === 'manager' ? 'bg-brand-gold text-brand-black' : 'bg-white/10 text-white'}`}>
-                          {m.senderName[0]}
-                        </div>
-                        <div>
-                          <h4 className="font-black text-white text-sm">
-                            {m.senderName}
-                            {(!m.recipientId || m.recipientId === 'all') && (
-                              <span className="text-[8px] bg-brand-gold/10 text-brand-gold px-2 py-0.5 rounded-full ml-2 uppercase tracking-widest">
-                                {m.senderRole === 'manager' ? 'Barchaga' : 'Menejerlarga'}
-                              </span>
-                            )}
-                          </h4>
-                          <p className="text-[10px] text-white/30 font-bold">{formatUzDateTime(m.timestamp)}</p>
-                        </div>
-                      </div>
-                      {!m.isRead && m.senderId !== user.id && <span className="px-2 py-1 bg-brand-gold text-brand-black text-[8px] font-black rounded-md uppercase tracking-widest">Yangi</span>}
-                    </div>
-                    <p className="text-white/70 font-medium leading-relaxed pl-1">{m.text}</p>
-                  </div>
-                ))
-              ) : (
-                <div className="bg-brand-dark rounded-[3rem] p-20 text-center border border-white/10 shadow-sm">
-                  <div className="w-20 h-20 bg-brand-black rounded-full flex items-center justify-center mx-auto mb-6 text-white/10">
-                    <Send className="w-10 h-10" />
-                  </div>
-                  <h3 className="text-xl font-black text-white mb-2">{t(language, 'no_messages')}</h3>
-                  <p className="text-white/40 font-medium">{t(language, 'manager_messages_desc')}</p>
-                </div>
-              )}
+            <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 text-center">Tez Orada</h2>
+            <p className="text-white/40 font-bold uppercase tracking-[0.3em] text-[10px] text-center max-w-[280px] leading-loose">
+              Xabarlar bo'limi ustida ish olib borilmoqda. Tez orada foydalanishga topshiriladi.
+            </p>
+            <div className="mt-12 px-6 py-3 bg-white/5 rounded-2xl border border-white/10">
+              <span className="text-[10px] font-black text-brand-gold uppercase tracking-[0.2em]">In Development</span>
             </div>
           </div>
         );
@@ -1778,8 +2366,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       setProfileForm({
                         firstName: user.firstName,
                         lastName: user.lastName,
+                        nickname: user.nickname || user.phone || '',
                         phone: user.phone,
-                        password: user.password,
+                        password: user.password || '',
                         photo: user.photo
                       });
                       setIsEditingProfile(true);
@@ -1790,9 +2379,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                   </button>
                 </div>
 
-                <div className="text-center md:text-left space-y-3 flex-1">
-                  <div>
-                    <h2 className="text-4xl font-black text-white tracking-tight">{user.firstName} {user.lastName}</h2>
+                <div className="text-center md:text-left space-y-3 flex-1 min-w-0 w-full pr-0 md:pr-40">
+                  <div className="w-full min-w-0 overflow-hidden">
+                    <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight truncate w-full">{user.firstName} {user.lastName}</h2>
                     <p className="text-brand-gold font-bold uppercase tracking-widest text-xs mt-1">{user.role}</p>
                   </div>
 
@@ -1805,6 +2394,16 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       <Calendar className="w-4 h-4 text-brand-gold" />
                       {joinDate}
                     </div>
+                  </div>
+                </div>
+
+                {/* JAMI Badge */}
+                <div className="absolute top-4 right-4 sm:top-8 sm:right-8 scale-90 sm:scale-100">
+                  <div className="bg-brand-gold/10 border-2 border-brand-gold/20 backdrop-blur-md px-4 sm:px-6 py-3 sm:py-4 rounded-[1.5rem] sm:rounded-[2rem] flex flex-col items-center justify-center shadow-2xl">
+                    <p className="text-2xl sm:text-3xl font-black text-brand-gold tracking-tighter leading-none">
+                      {totalSales.toLocaleString()}
+                    </p>
+                    <p className="text-[8px] sm:text-[10px] font-black text-brand-gold/60 uppercase tracking-[0.2em] mt-1.5 sm:mt-2">JAMI</p>
                   </div>
                 </div>
               </div>
@@ -1825,25 +2424,17 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 }[company] || { bg: 'bg-white/5', border: 'border-white/10', text: 'text-white/70', icon: 'text-white/30' };
 
                 return (
-                  <div key={company} className={`bg-brand-dark border ${styles.border} p-5 sm:p-6 rounded-[2rem] sm:rounded-[2.5rem] shadow-xl relative overflow-hidden group hover:-translate-y-1 transition-all duration-300`}>
-                    <div className={`absolute top-0 right-0 w-24 h-24 sm:w-32 sm:h-32 ${styles.bg} rounded-full -mr-8 -mt-8 sm:-mr-12 sm:-mt-12 blur-2xl sm:blur-3xl group-hover:scale-110 transition-transform`}></div>
-
-                    <div className="relative z-10 flex flex-row sm:flex-col h-full justify-between items-center sm:items-stretch gap-4">
-                      <div className="flex justify-between items-center sm:items-start w-full sm:w-auto gap-4 sm:gap-0">
-                        <div className="flex flex-col sm:flex-row justify-between items-start w-full">
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${styles.text} opacity-80 sm:hidden block mb-2`}>{company}</span>
-                          <div className="flex items-center gap-4 sm:hidden">
-                            <p className="text-3xl font-black text-white tracking-tight">{count}</p>
-                          </div>
-                          <div className={`p-2.5 sm:p-3 ${styles.bg} rounded-xl sm:rounded-2xl shadow-sm border ${styles.border} order-last sm:order-first`}>
-                            <Smartphone className={`w-5 h-5 sm:w-6 sm:h-6 ${styles.icon}`} />
-                          </div>
-                          <span className={`text-[10px] font-black uppercase tracking-widest ${styles.text} opacity-80 hidden sm:block`}>{company}</span>
-                        </div>
+                  <div key={company} className={`bg-brand-dark border ${styles.border} p-8 rounded-[2.5rem] shadow-xl relative overflow-hidden group hover:scale-[1.02] transition-all duration-300`}>
+                    <div className={`absolute inset-0 ${styles.bg} opacity-20`}></div>
+                    <div className="relative z-10">
+                      <div className="mb-6">
+                        <span className={`text-xs font-black uppercase tracking-[0.2em] ${styles.text} opacity-80`}>{company}</span>
                       </div>
-                      <div className="hidden sm:block">
-                        <p className="text-3xl sm:text-4xl font-black text-white tracking-tight">{count}</p>
-                        <p className={`text-[9px] sm:text-[10px] font-bold text-white/40 mt-1`}>Simkarta sotildi</p>
+                      <div className="flex items-baseline gap-2">
+                        <p className={`text-4xl font-black tracking-tight ${styles.text}`}>
+                          {count.toLocaleString()}
+                        </p>
+                        <span className="text-white/30 font-bold text-sm">dona</span>
                       </div>
                     </div>
                   </div>
@@ -1934,13 +2525,13 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       />
                     </div>
                     <div className="space-y-1.5">
-                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">G'iybat (Nickname)</label>
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Username</label>
                       <input
                         type="text"
                         value={profileForm.nickname}
                         onChange={e => setProfileForm({ ...profileForm, nickname: e.target.value })}
                         className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
-                        placeholder="Nikingizni kiriting"
+                        placeholder="Usernameni kiriting"
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -2435,9 +3026,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                 </span>
                               </td>
                               <td className="px-8 py-5 text-sm font-bold text-white/70">{sale.tariff}</td>
-                              <td className="px-8 py-5 text-center font-black text-xl text-blue-500">{sale.count}</td>
-                              <td className="px-8 py-5 text-center font-black text-lg text-white/70">{sale.bonus}</td>
-                              <td className="px-8 py-5 text-center font-black text-lg text-indigo-500">{sale.count + sale.bonus}</td>
+                              <td className="px-8 py-5 text-center font-black text-xl text-blue-500">{sale.count.toLocaleString()}</td>
+                              <td className="px-8 py-5 text-center font-black text-lg text-white/70">{sale.bonus.toLocaleString()}</td>
+                              <td className="px-8 py-5 text-center font-black text-lg text-indigo-500">{(sale.count + sale.bonus).toLocaleString()}</td>
                               <td className="px-8 py-5 text-right">
                                 <div className="flex items-center justify-end gap-3">
                                   <span className="text-[10px] font-bold text-white/30">{formatUzTime(sale.timestamp)}</span>
@@ -2620,7 +3211,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       <div className="p-8 bg-brand-gold rounded-[2.5rem] !text-white keep-white relative overflow-hidden group">
                         <div className="absolute -right-4 -top-4 w-20 h-20 bg-brand-black/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
                         <p className="text-[9px] font-black !text-white/80 keep-white uppercase tracking-widest mb-1 relative z-10">{t(language, 'today_total_sales')}</p>
-                        <p className="text-4xl font-black tracking-tight relative z-10 text-white keep-white">{state.sales.filter(s => s.date === today).reduce((acc, s) => acc + s.count + s.bonus, 0)} <span className="text-xs opacity-60 capitalize text-white keep-white">{t(language, 'pcs')}</span></p>
+                        <p className="text-4xl font-black tracking-tight relative z-10 text-white keep-white">{state.sales.filter(s => s.date === today).reduce((acc, s) => acc + s.count + s.bonus, 0).toLocaleString()} <span className="text-xs opacity-60 capitalize text-white keep-white">{t(language, 'pcs')}</span></p>
                       </div>
                     </div>
                   </div>

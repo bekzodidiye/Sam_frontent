@@ -11,11 +11,10 @@ export const formatUzTime = (date: Date | string | number) => {
 
 export const getUzTime = (date?: Date | string | number) => {
   const d = date ? new Date(date) : new Date();
-  // Convert to Uzbekistan time string and parse it back to a Date object
-  // This Date object's local time methods (getHours, etc.) will now return Uzbekistan values
-  // Note: This is a common trick to "force" a timezone for calculations
-  const uzStr = d.toLocaleString("en-US", { timeZone: "Asia/Tashkent" });
-  return new Date(uzStr);
+  // Uzbekistan is UTC+5
+  const utc = d.getTime() + (d.getTimezoneOffset() * 60000);
+  const uzTime = new Date(utc + (3600000 * 5));
+  return uzTime;
 };
 
 export const formatUzDateTime = (date: Date | string | number) => {

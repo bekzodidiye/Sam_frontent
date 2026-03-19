@@ -14,6 +14,7 @@ export interface User {
   id: string;
   firstName: string;
   lastName: string;
+  nickname?: string;
   phone: string;
   role: Role;
   password?: string;
@@ -111,6 +112,23 @@ export interface RatingThresholds {
   companies: Record<string, { bronze: number; silver: number; gold: number }>;
 }
 
+export interface GlobalSettings {
+  id: number;
+  rating_enabled: boolean;
+  updated_at: string;
+}
+
+export interface OperatorRating {
+  id: string;
+  operatorId: string;
+  ratedById: string;
+  ratedByName: string;
+  date: string;
+  stars: number;
+  comment: string;
+  timestamp: string;
+}
+
 export interface AppState {
   currentUser: User | null;
   users: User[];
@@ -125,4 +143,6 @@ export interface AppState {
   ratingThresholds?: RatingThresholds;
   processedMonthsForAchievements?: string[];
   salesLinks: SalesLink[];
+  globalSettings: GlobalSettings | null;
+  operatorRatings: OperatorRating[];
 }
