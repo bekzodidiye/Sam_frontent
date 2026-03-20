@@ -196,7 +196,7 @@ const SingleLocationMap: React.FC<{
         dragging: true,
         zoomControl: false,
         attributionControl: false
-      }).setView([center.lat, center.lng], 15);
+      }).setView([center.lat, center.lng], 14);
 
       const tileUrl = isDarkMode
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -253,9 +253,9 @@ const SingleLocationMap: React.FC<{
         ]);
         leafletMap.current.fitBounds(bounds, { padding: [50, 50] });
       } else if (location) {
-        leafletMap.current.setView([location.lat, location.lng], 16);
+        leafletMap.current.setView([location.lat, location.lng], 14);
       } else if (endLocation) {
-        leafletMap.current.setView([endLocation.lat, endLocation.lng], 16);
+        leafletMap.current.setView([endLocation.lat, endLocation.lng], 14);
       }
     }
   }, [location, endLocation, initials, isDarkMode]);
@@ -419,7 +419,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   const [isLeagueDropdownOpen, setIsLeagueDropdownOpen] = useState(false);
   const [isOperatorDropdownOpen, setIsOperatorDropdownOpen] = useState(false);
   const [leagueForm, setLeagueForm] = useState<{ league: 'gold' | 'silver' | 'bronze', userId: string }>({ league: 'gold', userId: '' });
-  const [chartTimeframe, setChartTimeframe] = useState<'week' | 'month' | 'year'>('week');
+  const [chartTimeframe, setChartTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [chartDayOffset, setChartDayOffset] = useState(0);
   const [selectedYear, setSelectedYear] = useState<number>(new Date().getFullYear());
   const [weekOffset, setWeekOffset] = useState<number>(0);
   const [monthOffset, setMonthOffset] = useState<number>(0);
@@ -432,10 +433,22 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   const [messageText, setMessageText] = useState('');
 
   // Monitoring Tab State
-  const [monitoringTimeframe, setMonitoringTimeframe] = useState<'today' | 'month' | 'year'>('today');
+  const [monitoringTimeframe, setMonitoringTimeframe] = useState<'today' | 'week' | 'month' | 'year'>('today');
+  const [monitoringDayOffset, setMonitoringDayOffset] = useState(0);
   const [monitoringWeekOffset, setMonitoringWeekOffset] = useState(0);
   const [monitoringMonthOffset, setMonitoringMonthOffset] = useState(0);
   const [monitoringYear, setMonitoringYear] = useState(new Date().getFullYear());
+  const monitoringTargetDay = useMemo(() => {
+    const d = getUzTime();
+    d.setDate(d.getDate() + monitoringDayOffset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [monitoringDayOffset]);
+
+  const chartTargetDay = useMemo(() => {
+    const d = getUzTime();
+    d.setDate(d.getDate() + chartDayOffset);
+    return getFormattedDateStr(d);
+  }, [chartDayOffset]);
   const [monitoringSelectedDay, setMonitoringSelectedDay] = useState<string | null>(null);
   const [isWorkPointModalOpen, setIsWorkPointModalOpen] = useState(false);
   const [workPointForm, setWorkPointForm] = useState<{ userId: string, location: { lat: number, lng: number } | null, radius: number, workType: 'office' | 'mobile' | 'desk' }>({ userId: '', location: null, radius: 200, workType: 'office' });
@@ -480,14 +493,32 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
       d.setMonth(d.getMonth() + monthOffset);
       const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date.startsWith(monthPrefix));
+    } else if (chartTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (weekOffset * 7));
+      targetMonday.setHours(0, 0, 0, 0);
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+      targetSunday.setHours(23, 59, 59, 999);
+
+      daySales = state.sales.filter(s => {
+        const sDate = new Date(s.date);
+        sDate.setHours(0,0,0,0);
+        return s.userId === selectedUserIdInternal && sDate >= targetMonday && sDate <= targetSunday;
+      });
+    } else if (chartTimeframe === 'day') {
+      daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date === chartTargetDay);
     } else {
+      // Default to today
       daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date === today);
     }
     return daySales.sort((a, b) => {
       const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
       return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
     });
-  }, [selectedUserIdInternal, state.sales, selectedDay, chartTimeframe, selectedYear, monthOffset]);
+  }, [selectedUserIdInternal, state.sales, selectedDay, chartTimeframe, selectedYear, monthOffset, weekOffset, chartTargetDay]);
 
   const userFilteredReports = useMemo(() => {
     if (!selectedUserIdInternal) return [];
@@ -508,11 +539,28 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
       d.setMonth(d.getMonth() + monthOffset);
       const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date.startsWith(monthPrefix));
+    } else if (chartTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (weekOffset * 7));
+      targetMonday.setHours(0, 0, 0, 0);
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+      targetSunday.setHours(23, 59, 59, 999);
+
+      timeframeReports = state.reports.filter(r => {
+        const rDate = new Date(r.date);
+        rDate.setHours(0,0,0,0);
+        return r.userId === selectedUserIdInternal && rDate >= targetMonday && rDate <= targetSunday;
+      });
+    } else if (chartTimeframe === 'day') {
+      timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date === chartTargetDay);
     } else {
       timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date === today);
     }
     return timeframeReports.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
-  }, [selectedUserIdInternal, state.reports, selectedDay, chartTimeframe, selectedYear, monthOffset]);
+  }, [selectedUserIdInternal, state.reports, selectedDay, chartTimeframe, selectedYear, monthOffset, weekOffset, chartTargetDay]);
   
   const paginatedUserSales = useMemo(() => userFilteredSales.slice((userSalesPage - 1) * userSalesPerPage, userSalesPage * userSalesPerPage), [userFilteredSales, userSalesPage]);
   const paginatedUserReports = useMemo(() => userFilteredReports.slice((userReportsPage - 1) * userReportsPerPage, userReportsPage * userReportsPerPage), [userFilteredReports, userReportsPage]);
@@ -755,20 +803,47 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
   const getUserSalesCount = (userId: string, timeframe: string) => {
     let sales = state.sales.filter(s => s.userId === userId);
-    if (timeframe === 'today') sales = sales.filter(s => s.date === today);
-    if (timeframe === 'month') sales = sales.filter(s => s.date.startsWith(today.substring(0, 7)));
-    if (timeframe === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      sales = sales.filter(s => new Date(s.date) >= weekAgo);
+    if (timeframe === 'today') {
+      sales = sales.filter(s => s.date === today);
+    } else if (timeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday);
+      targetMonday.setHours(0, 0, 0, 0);
+      sales = sales.filter(s => new Date(s.date) >= targetMonday);
+    } else if (timeframe === 'month') {
+      const currentMonth = today.substring(0, 7);
+      sales = sales.filter(s => s.date.startsWith(currentMonth));
+    } else if (timeframe === 'year') {
+      const currentYear = today.substring(0, 4);
+      sales = sales.filter(s => s.date.startsWith(currentYear));
     }
     return sales.reduce((sum, s) => sum + s.count + s.bonus, 0);
   };
 
-  const getSalesChartData = (userId: string, timeframe: 'week' | 'month' | 'year', targetYear: number, wOffset: number, mOffset: number) => {
+  const getSalesChartData = (userId: string, timeframe: 'day' | 'week' | 'month' | 'year', targetYear: number, wOffset: number, mOffset: number, dOffset: number = 0) => {
     const data = [];
 
-    if (timeframe === 'week') {
+    if (timeframe === 'day') {
+      const d = getUzTime();
+      d.setDate(d.getDate() + dOffset);
+      const targetDate = getFormattedDateStr(d);
+      const hours = ['00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+      for (let i = 0; i < hours.length; i++) {
+        const h = parseInt(hours[i].split(':')[0]);
+        const daySales = state.sales.filter(s => {
+          if (s.userId !== userId) return false;
+          if (!isDateMatch(s.timestamp, targetDate)) return false;
+          const sTime = getUzTime(s.timestamp);
+          const sHour = sTime.getHours();
+          return sHour >= h && sHour < h + 2;
+        });
+        const simcards = daySales.reduce((sum, s) => sum + s.count, 0);
+        const bonuses = daySales.reduce((sum, s) => sum + s.bonus, 0);
+        data.push({ name: hours[i], fullDate: targetDate, simcards, bonuses });
+      }
+    } else if (timeframe === 'week') {
       const d = getUzTime();
       const currentDayIndex = d.getDay();
       const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
@@ -790,6 +865,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
         });
       }
     } else if (timeframe === 'month') {
+
       const d = getUzTime();
       d.setDate(1);
       d.setMonth(d.getMonth() + mOffset);
@@ -820,8 +896,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
   const currentChartData = useMemo(() => {
     if (!selectedUserId) return [];
-    return getSalesChartData(selectedUserId, chartTimeframe, selectedYear, weekOffset, monthOffset);
-  }, [selectedUserId, chartTimeframe, selectedYear, weekOffset, monthOffset, state.sales]);
+    return getSalesChartData(selectedUserId, chartTimeframe, selectedYear, weekOffset, monthOffset, chartDayOffset);
+  }, [selectedUserId, chartTimeframe, selectedYear, weekOffset, monthOffset, chartDayOffset, state.sales]);
 
   const userChartTotals = useMemo(() => {
     const totalSimcards = currentChartData.reduce((sum, item) => sum + (item.simcards || 0), 0);
@@ -830,6 +906,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   }, [currentChartData]);
 
   const chartTitleLabel = useMemo(() => {
+    if (chartTimeframe === 'day') {
+      const d = getUzTime();
+      d.setDate(d.getDate() + chartDayOffset);
+      const monthName = translations[language].month_names[d.getMonth()];
+      return `${d.getDate()} ${monthName}`;
+    }
     if (chartTimeframe === 'week') return 'Haftalik';
     if (chartTimeframe === 'month') {
       const d = new Date();
@@ -840,7 +922,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     }
     if (chartTimeframe === 'year') return `${t(language, 'yearly')} - ${selectedYear}`;
     return '';
-  }, [chartTimeframe, monthOffset, selectedYear]);
+  }, [chartTimeframe, monthOffset, selectedYear, chartDayOffset, language]);
 
   const activeReferencePoint = useMemo(() => {
     if (!selectedDay) return null;
@@ -856,6 +938,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     setWeekOffset(0);
     setMonthOffset(0);
     setSelectedYear(getUzTime().getFullYear());
+    setChartDayOffset(0);
   };
 
   useEffect(() => {
@@ -915,36 +998,71 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     let filteredSales = state.sales;
 
     if (monitoringTimeframe === 'today') {
-      const d = getUzTime();
-      d.setDate(d.getDate() + monitoringWeekOffset);
-      const targetDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-      filteredSales = filteredSales.filter(s => s.date === targetDate);
+      filteredSales = filteredSales.filter(s => s.date === monitoringTargetDay);
+    } else if (monitoringTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
+      targetMonday.setHours(0, 0, 0, 0);
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+      targetSunday.setHours(23, 59, 59, 999);
+      filteredSales = filteredSales.filter(s => {
+        const sDate = new Date(s.date);
+        sDate.setHours(0,0,0,0);
+        return sDate >= targetMonday && sDate <= targetSunday;
+      });
     } else if (monitoringTimeframe === 'month') {
       const d = new Date();
       d.setDate(1);
       d.setMonth(d.getMonth() + monitoringMonthOffset);
-      const year = d.getFullYear();
-      const month = d.getMonth();
-      const monthPrefix = `${year}-${String(month + 1).padStart(2, '0')}`;
+      const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
       filteredSales = filteredSales.filter(s => s.date.startsWith(monthPrefix));
     } else if (monitoringTimeframe === 'year') {
       const yearPrefix = monitoringYear.toString();
       filteredSales = filteredSales.filter(s => s.date.startsWith(yearPrefix));
     }
     return filteredSales;
-  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, state.sales]);
+  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, state.sales, monitoringTargetDay]);
 
   const monitoringChartData = useMemo(() => {
     const data = [];
     if (monitoringTimeframe === 'today') {
-      const d = getUzTime();
-      d.setDate(d.getDate() + monitoringWeekOffset);
-      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
-
-      const daySales = monitoringPeriodSales.filter(s => s.date === dateStr);
-      const simcards = daySales.reduce((sum, s) => sum + s.count, 0);
-      const bonuses = daySales.reduce((sum, s) => sum + s.bonus, 0);
-      data.push({ name: 'Bugun', simcards, bonuses, fullDate: dateStr });
+      const hours = ['08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+      for (let i = 0; i < hours.length; i++) {
+        const h = parseInt(hours[i].split(':')[0]);
+        const daySales = monitoringPeriodSales.filter(s => {
+          if (s.date !== monitoringTargetDay) return false;
+          const sTime = new Date(s.timestamp);
+          const sHour = sTime.getHours();
+          return sHour >= h && sHour < h + 2;
+        });
+        data.push({
+          name: hours[i],
+          simcards: daySales.reduce((sum, s) => sum + s.count, 0),
+          bonuses: daySales.reduce((sum, s) => sum + s.bonus, 0),
+          fullDate: monitoringTargetDay
+        });
+      }
+    } else if (monitoringTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
+      const uzDays = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Juma', 'Shan'];
+      for (let i = 0; i < 7; i++) {
+        const current = new Date(targetMonday);
+        current.setDate(targetMonday.getDate() + i);
+        const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
+        const daySales = monitoringPeriodSales.filter(s => s.date === dateStr);
+        data.push({
+          name: uzDays[current.getDay()],
+          simcards: daySales.reduce((sum, s) => sum + s.count, 0),
+          bonuses: daySales.reduce((sum, s) => sum + s.bonus, 0),
+          fullDate: dateStr
+        });
+      }
     } else if (monitoringTimeframe === 'month') {
       const d = new Date();
       d.setDate(1);
@@ -973,6 +1091,40 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     }
     return data;
   }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, monitoringPeriodSales]);
+
+  const monitoringCurrentPeriodLabel = useMemo(() => {
+    if (monitoringTimeframe === 'today') {
+      const d = new Date();
+      d.setDate(d.getDate() + monitoringDayOffset);
+      const monthNames = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+      return `${d.getDate()} ${monthNames[d.getMonth()]}`;
+    }
+    if (monitoringTimeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+
+      const startDay = targetMonday.getDate();
+      const endDay = targetSunday.getDate();
+      const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
+
+      if (targetMonday.getMonth() !== targetSunday.getMonth()) {
+        return `${startDay} ${monthNames[targetMonday.getMonth()]} - ${endDay} ${monthNames[targetSunday.getMonth()]}`;
+      }
+      return `${startDay}-${endDay} ${monthNames[targetMonday.getMonth()]}`;
+    }
+    if (monitoringTimeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monitoringMonthOffset);
+      const monthNames = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+      return `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+    }
+    return monitoringYear.toString();
+  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, monitoringDayOffset]);
 
   const monitoringTotals = useMemo(() => {
     const totalSimcards = monitoringPeriodSales.reduce((sum, s) => sum + s.count, 0);
@@ -1403,6 +1555,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   Bugun
                 </button>
                 <button
+                  onClick={() => setMonitoringTimeframe('week')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'week' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
+                >
+                  {t(language, 'this_week')}
+                </button>
+                <button
                   onClick={() => setMonitoringTimeframe('month')}
                   className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'month' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
                 >
@@ -1420,7 +1578,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 <button
                   onClick={() => {
                     setMonitoringSelectedDay(null);
-                    if (monitoringTimeframe === 'today') setMonitoringWeekOffset(prev => prev - 1);
+                    if (monitoringTimeframe === 'today') setMonitoringDayOffset(prev => prev - 1);
+                    else if (monitoringTimeframe === 'week') setMonitoringWeekOffset(prev => prev - 1);
                     else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev - 1);
                     else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev - 1);
                   }}
@@ -1429,25 +1588,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   <ChevronLeft className="w-4 h-4" />
                 </button>
                 <span className="text-[10px] sm:text-xs font-black text-white/60 px-2 sm:px-4 uppercase tracking-widest min-w-[100px] sm:min-w-[140px] text-center">
-                  {(() => {
-                    if (monitoringTimeframe === 'today') {
-                      const d = getUzTime();
-                      d.setDate(d.getDate() + monitoringWeekOffset);
-                      return `${d.getDate()}-${['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'][d.getMonth()]} ${d.getFullYear()}`;
-                    } else if (monitoringTimeframe === 'month') {
-                      const d = new Date();
-                      d.setDate(1);
-                      d.setMonth(d.getMonth() + monitoringMonthOffset);
-                      return `${['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'][d.getMonth()]} ${d.getFullYear()}`;
-                    } else {
-                      return monitoringYear.toString();
-                    }
-                  })()}
+                  {monitoringCurrentPeriodLabel}
                 </span>
                 <button
                   onClick={() => {
                     setMonitoringSelectedDay(null);
-                    if (monitoringTimeframe === 'today') setMonitoringWeekOffset(prev => prev + 1);
+                    if (monitoringTimeframe === 'today') setMonitoringDayOffset(prev => prev + 1);
+                    else if (monitoringTimeframe === 'week') setMonitoringWeekOffset(prev => prev + 1);
                     else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev + 1);
                     else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev + 1);
                   }}
@@ -1582,7 +1729,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="flex items-center gap-4 w-full md:w-auto">
                 <div className="p-3 bg-brand-gold/10 rounded-2xl text-brand-gold shadow-sm"><Smartphone className="w-6 h-6" /></div>
                 <h3 className="text-xl font-black text-white tracking-tight">
-                  {monitoringSelectedDay ? `${monitoringSelectedDay} Kunlik Sotuvlar` : "Operatorlar bo'yicha hisobot"}
+                  {monitoringSelectedDay ? `${monitoringSelectedDay} Kunlik Sotuvlar` : (
+                    monitoringTimeframe === 'today' ? "Bugungi operatorlar hisoboti" :
+                    monitoringTimeframe === 'week' ? "Haftalik operatorlar hisoboti" :
+                    monitoringTimeframe === 'month' ? "Oylik operatorlar hisoboti" :
+                    monitoringTimeframe === 'year' ? "Yillik operatorlar hisoboti" :
+                    "Operatorlar bo'yicha hisobot"
+                  )}
                 </h3>
               </div>
               <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-center md:justify-end">
@@ -1971,34 +2124,36 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar no-scrollbar bg-brand-black">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <RefinedStatCard
-                  label={t(language, 'today_sales')}
+                  label={t(language, 'today')}
                   value={getUserSalesCount(selectedUser.id, 'today')}
                   icon={<Clock />}
                   color="bg-blue-500"
+                  isActive={chartTimeframe === 'day'}
+                  onClick={() => { setChartTimeframe('day'); setSelectedDay(null); }}
+                />
+                <RefinedStatCard
+                  label={t(language, 'this_week')}
+                  value={getUserSalesCount(selectedUser.id, 'week')}
+                  icon={<CalendarDays />}
+                  color="bg-blue-500"
                   isActive={chartTimeframe === 'week'}
-                  onClick={() => setChartTimeframe('week')}
+                  onClick={() => { setChartTimeframe('week'); setSelectedDay(null); }}
                 />
                 <RefinedStatCard
                   label={t(language, 'this_month')}
                   value={getUserSalesCount(selectedUser.id, 'month')}
-                  icon={<CalendarDays />}
-                  color="bg-blue-500"
-                  isActive={chartTimeframe === 'month'}
-                  onClick={() => setChartTimeframe('month')}
-                />
-                <RefinedStatCard
-                  label={t(language, 'phone')}
-                  value={selectedUser.phone?.startsWith('+') ? selectedUser.phone : '+' + selectedUser.phone}
-                  icon={<Phone />}
-                  color="bg-blue-500"
-                />
-                <RefinedStatCard
-                  label={t(language, 'total')}
-                  value={getUserSalesCount(selectedUser.id, 'total')}
                   icon={<Award />}
                   color="bg-blue-500"
+                  isActive={chartTimeframe === 'month'}
+                  onClick={() => { setChartTimeframe('month'); setSelectedDay(null); }}
+                />
+                <RefinedStatCard
+                  label={t(language, 'yearly')}
+                  value={getUserSalesCount(selectedUser.id, 'year')}
+                  icon={<TrendingUp />}
+                  color="bg-blue-500"
                   isActive={chartTimeframe === 'year'}
-                  onClick={() => setChartTimeframe('year')}
+                  onClick={() => { setChartTimeframe('year'); setSelectedDay(null); }}
                 />
               </div>
 
@@ -2032,35 +2187,26 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         <div className="flex items-center justify-between sm:justify-start gap-1 bg-brand-black p-1 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto mt-2 sm:mt-0">
                           <button
                             onClick={() => {
-                              if (chartTimeframe === 'week') setWeekOffset(prev => prev - 1);
+                              if (chartTimeframe === 'day') setChartDayOffset(prev => prev - 1);
+                              else if (chartTimeframe === 'week') setWeekOffset(prev => prev - 1);
                               else if (chartTimeframe === 'month') setMonthOffset(prev => prev - 1);
                               else if (chartTimeframe === 'year') setSelectedYear(prev => prev - 1);
                             }}
-                            className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/30 hover:text-brand-gold focus:outline-none"
+                            className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/40 hover:text-brand-gold focus:outline-none"
                           >
                             <ChevronLeft className="w-4 h-4" />
                           </button>
                           <span className="text-[10px] font-black text-brand-gold px-2 uppercase tracking-tighter whitespace-nowrap min-w-[120px] text-center">
-                            {chartTimeframe === 'week' ? (
-                              currentChartData.length === 7 ? (() => {
-                                const s = new Date(currentChartData[0].fullDate);
-                                const e = new Date(currentChartData[6].fullDate);
-                                const fmt = (d: Date) => `M${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getDate()).padStart(2, '0')}`;
-                                return `${fmt(s)} — ${fmt(e)}`;
-                              })() : '...'
-                            ) : chartTimeframe === 'month' ? (
-                              chartTitleLabel
-                            ) : (
-                              selectedYear
-                            )}
+                            {chartTitleLabel}
                           </span>
                           <button
                             onClick={() => {
-                              if (chartTimeframe === 'week') setWeekOffset(prev => prev + 1);
+                              if (chartTimeframe === 'day') setChartDayOffset(prev => prev + 1);
+                              else if (chartTimeframe === 'week') setWeekOffset(prev => prev + 1);
                               else if (chartTimeframe === 'month') setMonthOffset(prev => prev + 1);
                               else if (chartTimeframe === 'year') setSelectedYear(prev => prev + 1);
                             }}
-                            className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/30 hover:text-brand-gold focus:outline-none"
+                            className="p-1.5 hover:bg-white/5 hover:shadow-sm rounded-lg transition-all text-white/40 hover:text-brand-gold focus:outline-none"
                           >
                             <ChevronRight className="w-4 h-4" />
                           </button>
@@ -2185,11 +2331,21 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       <div className="flex items-center gap-3 w-full md:w-auto">
                         <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><Smartphone className="w-5 h-5" /></div>
                         <h3 className="text-lg font-black text-white tracking-tight">
-                          {selectedDay ? (chartTimeframe === 'year' ? `${(() => {
-                            const d = new Date(selectedDay);
-                            const monthName = translations[language].month_names[d.getMonth()];
-                            return `${monthName} ${d.getFullYear()}`;
-                          })()} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'year' ? `${selectedYear} ${t(language, 'yearly')} sotuvlar ro'yxati` : chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
+                          {(() => {
+                            if (selectedDay) {
+                              if (chartTimeframe === 'year') {
+                                const d = new Date(selectedDay);
+                                const monthName = translations[language].month_names[d.getMonth()];
+                                return `${monthName} ${d.getFullYear()} ${t(language, 'monthly_sales_title')}`;
+                              }
+                              return `${selectedDay} ${t(language, 'daily_sales_title')}`;
+                            }
+                            if (chartTimeframe === 'year') return `${selectedYear} ${t(language, 'yearly_sales_title')}`;
+                            if (chartTimeframe === 'month') return `${chartTitleLabel} ${t(language, 'monthly_sales_title')}`;
+                            if (chartTimeframe === 'week') return `${chartTitleLabel} ${t(language, 'weekly_sales_title')}`;
+                            if (chartTimeframe === 'day') return `${chartTargetDay} ${t(language, 'daily_sales_title')}`;
+                            return `${today} ${t(language, 'daily_sales_title')}`;
+                          })()}
                         </h3>
                       </div>
 
@@ -2390,7 +2546,20 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><FileText className="w-5 h-5" /></div>
                         <h3 className="text-lg font-black text-white tracking-tight">
-                          {t(language, 'daily_report')} {selectedDay ? `(${selectedDay})` : `(${t(language, 'today')})`}
+                          {(() => {
+                            if (selectedDay) {
+                              if (chartTimeframe === 'year') {
+                                const d = new Date(selectedDay);
+                                const monthName = translations[language].month_names[d.getMonth()];
+                                return `${monthName} ${d.getFullYear()} Hisobotlari`;
+                              }
+                              return `${selectedDay} Hisoboti`;
+                            }
+                            if (chartTimeframe === 'year') return `${selectedYear} Yillik Hisobotlari`;
+                            if (chartTimeframe === 'month') return `${chartTitleLabel} Oylik Hisobotlari`;
+                            if (chartTimeframe === 'week') return `${chartTitleLabel} Haftalik Hisobotlari`;
+                            return `${today} Kunlik Hisoboti`;
+                          })()}
                         </h3>
                       </div>
                     </div>

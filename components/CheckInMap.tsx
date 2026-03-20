@@ -32,9 +32,9 @@ const MapUpdater: React.FC<{ currentLocation: { lat: number; lng: number } | nul
       ]);
       map.fitBounds(bounds, { padding: [50, 50] });
     } else if (currentLocation) {
-      map.setView([currentLocation.lat, currentLocation.lng], 15);
+      map.setView([currentLocation.lat, currentLocation.lng], 14);
     } else if (workLocation) {
-      map.setView([workLocation.lat, workLocation.lng], 15);
+      map.setView([workLocation.lat, workLocation.lng], 14);
     }
   }, [currentLocation, workLocation, map]);
 
@@ -73,7 +73,7 @@ const CheckInMap: React.FC<CheckInMapProps> = ({ currentLocation, workLocation, 
     <div className={`relative ${className || "h-64 w-full rounded-2xl overflow-hidden border border-white/10 mt-4"}`}>
       <MapContainer
         center={center}
-        zoom={15}
+        zoom={14}
         scrollWheelZoom={true}
         style={{ height: '100%', width: '100%' }}
       >

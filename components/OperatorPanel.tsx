@@ -165,7 +165,7 @@ const SingleLocationMap: React.FC<{
         dragging: true,
         zoomControl: false,
         attributionControl: false
-      }).setView([center.lat, center.lng], 15);
+      }).setView([center.lat, center.lng], 14);
 
       const tileUrl = isDarkMode
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
@@ -194,7 +194,7 @@ const SingleLocationMap: React.FC<{
         } else {
           startMarkerRef.current = L.marker([location.lat, location.lng], { icon: startIcon }).addTo(leafletMap.current);
         }
-        leafletMap.current.setView([location.lat, location.lng], 16);
+        leafletMap.current.setView([location.lat, location.lng], 14);
       }
     }
   }, [location, endLocation, initials]);
@@ -238,13 +238,21 @@ const SingleLocationMap: React.FC<{
           href={`https://www.google.com/maps?q=${(endLocation || location!).lat},${(endLocation || location!).lng}`}
           target="_blank"
           rel="noopener noreferrer"
-          className="bg-brand-black/95 backdrop-blur-md p-2.5 rounded-xl shadow-lg border border-white/10 text-brand-gold hover:text-brand-gold/80 transition-all block hover:scale-105"
+          className={`p-2.5 rounded-xl shadow-lg border transition-all block hover:scale-105 ${
+            isDarkMode 
+              ? 'bg-brand-black/95 border-white/10 text-brand-gold hover:text-brand-gold/80' 
+              : 'bg-white border-blue-100 text-blue-500 hover:bg-blue-50 hover:text-blue-600'
+          }`}
           title="Google Maps'da ko'rish"
         >
-          <ExternalLink className="w-4 h-4" />
+          <ExternalLink className="w-5 h-5" />
         </a>
       </div>
-      <div className="absolute bottom-4 left-6 z-10 bg-brand-gold text-brand-black px-4 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-2xl ring-4 ring-brand-gold/30">
+      <div className={`absolute bottom-4 left-4 z-10 px-4 py-2.5 rounded-2xl text-[10px] font-black uppercase tracking-widest shadow-xl ring-4 ${
+        isDarkMode 
+          ? 'bg-brand-gold text-brand-black ring-brand-gold/30' 
+          : 'bg-blue-600 text-white ring-blue-500/30'
+      }`}>
         {t(language, 'live_location')}
       </div>
     </div>
@@ -310,16 +318,38 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     setMonitoringWeekOffset(0);
     setMonitoringMonthOffset(0);
     setMonitoringYear(new Date().getFullYear());
+    setMonitoringDayOffset(0);
   };
 
   const getUserSalesCount = (userId: string, timeframe: string) => {
     let sales = state.sales.filter(s => s.userId === userId);
-    if (timeframe === 'today') sales = sales.filter(s => s.date === today);
-    if (timeframe === 'month') sales = sales.filter(s => s.date.startsWith(today.substring(0, 7)));
-    if (timeframe === 'week') {
-      const weekAgo = new Date();
-      weekAgo.setDate(weekAgo.getDate() - 7);
-      sales = sales.filter(s => new Date(s.date) >= weekAgo);
+    if (timeframe === 'today') {
+      const d = getUzTime();
+      d.setDate(d.getDate() + monitoringDayOffset);
+      const targetDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      sales = sales.filter(s => s.date === targetDate);
+    } else if (timeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monitoringMonthOffset);
+      const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      sales = sales.filter(s => s.date.startsWith(monthPrefix));
+    } else if (timeframe === 'year') {
+      sales = sales.filter(s => s.date.startsWith(monitoringYear.toString()));
+    } else if (timeframe === 'week') {
+      const d = new Date();
+      const currentDayIndex = d.getDay();
+      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
+      targetMonday.setHours(0, 0, 0, 0);
+      const targetSunday = new Date(targetMonday);
+      targetSunday.setDate(targetMonday.getDate() + 6);
+      targetSunday.setHours(23, 59, 59, 999);
+      sales = sales.filter(s => {
+        const sDate = new Date(s.date);
+        sDate.setHours(0,0,0,0);
+        return sDate >= targetMonday && sDate <= targetSunday;
+      });
     }
     return sales.reduce((sum, s) => sum + s.count + s.bonus, 0);
   };
@@ -361,10 +391,16 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
   const [ratingCustomStart, setRatingCustomStart] = useState(today);
   const [ratingCustomEnd, setRatingCustomEnd] = useState(today);
   const [ratingMonthOffset, setRatingMonthOffset] = useState(0);
-  const [monitoringTimeframe, setMonitoringTimeframe] = useState<'week' | 'month' | 'year'>('week');
+  const [monitoringTimeframe, setMonitoringTimeframe] = useState<'day' | 'week' | 'month' | 'year'>('day');
+  const [monitoringDayOffset, setMonitoringDayOffset] = useState(0);
   const [monitoringWeekOffset, setMonitoringWeekOffset] = useState(0);
   const [monitoringMonthOffset, setMonitoringMonthOffset] = useState(0);
   const [monitoringYear, setMonitoringYear] = useState(getUzTime().getFullYear());
+  const monitoringTargetDay = useMemo(() => {
+    const d = getUzTime();
+    d.setDate(d.getDate() + monitoringDayOffset);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  }, [monitoringDayOffset]);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedTargetMonth, setSelectedTargetMonth] = useState(today.substring(0, 7));
   const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -893,7 +929,26 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
 
   const monitoringChartData = useMemo(() => {
     const data = [];
-    if (monitoringTimeframe === 'week') {
+    if (monitoringTimeframe === 'day') {
+      const targetDate = monitoringTargetDay;
+      const hours = ['00:00', '02:00', '04:00', '06:00', '08:00', '10:00', '12:00', '14:00', '16:00', '18:00', '20:00', '22:00'];
+      for (let i = 0; i < hours.length; i++) {
+        const h = parseInt(hours[i].split(':')[0]);
+        const daySales = state.sales.filter(s => {
+          if (s.userId !== user.id) return false;
+          if (!isDateMatch(s.timestamp, targetDate)) return false;
+          const sTime = getUzTime(s.timestamp);
+          const sHour = sTime.getHours();
+          return sHour >= h && sHour < h + 2;
+        });
+        data.push({
+          name: hours[i],
+          simcards: daySales.reduce((sum, s) => sum + s.count, 0),
+          bonuses: daySales.reduce((sum, s) => sum + s.bonus, 0),
+          fullDate: targetDate
+        });
+      }
+    } else if (monitoringTimeframe === 'week') {
       const d = new Date();
       const currentDayIndex = d.getDay();
       const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
@@ -942,7 +997,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
       }
     }
     return data;
-  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, state.sales, user.id]);
+  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, state.sales, user.id, monitoringTargetDay]);
 
   const monitoringTotals = useMemo(() => {
     const totalSimcards = monitoringChartData.reduce((sum, item) => sum + (item.simcards || 0), 0);
@@ -991,6 +1046,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     } else if (monitoringTimeframe === 'year') {
       const yearPrefix = monitoringYear.toString();
       filteredSales = filteredSales.filter(s => s.date.startsWith(yearPrefix));
+    } else if (monitoringTimeframe === 'day') {
+      filteredSales = filteredSales.filter(s => s.date === monitoringTargetDay);
     }
 
     const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
@@ -1000,7 +1057,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
       }
     });
     return totals;
-  }, [state.sales, user.id, monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear]);
+  }, [state.sales, user.id, monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, monitoringTargetDay]);
 
   const monitoringAllTimeTotals = useMemo(() => {
     const totals: Record<string, number> = { 'Ucell': 0, 'Mobiuz': 0, 'Beeline': 0, 'Uztelecom': 0 };
@@ -1013,6 +1070,12 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
   }, [state.sales, user.id]);
 
   const monitoringCurrentPeriodLabel = useMemo(() => {
+    if (monitoringTimeframe === 'day') {
+      const d = getUzTime();
+      d.setDate(d.getDate() + monitoringDayOffset);
+      const monthNames = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
+      return `${d.getDate()} ${monthNames[d.getMonth()]}`; // No year as requested
+    }
     if (monitoringTimeframe === 'week') {
       const d = new Date();
       const currentDayIndex = d.getDay();
@@ -1038,7 +1101,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
       return `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
     }
     return monitoringYear.toString();
-  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear]);
+  }, [monitoringTimeframe, monitoringWeekOffset, monitoringMonthOffset, monitoringYear, monitoringDayOffset]);
 
   const renderContent = () => {
 
@@ -1282,34 +1345,36 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
             <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar no-scrollbar bg-brand-black">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <RefinedStatCard
-                  label={t(language, 'today_sales')}
+                  label={t(language, 'today')}
                   value={getUserSalesCount(selectedUser.id, 'today')}
                   icon={<Clock />}
                   color="bg-blue-500"
+                  isActive={chartTimeframe === 'day'}
+                  onClick={() => { setChartTimeframe('day'); setSelectedDay(null); }}
+                />
+                <RefinedStatCard
+                  label={t(language, 'this_week')}
+                  value={getUserSalesCount(selectedUser.id, 'week')}
+                  icon={<CalendarDays />}
+                  color="bg-blue-500"
                   isActive={chartTimeframe === 'week'}
-                  onClick={() => setChartTimeframe('week')}
+                  onClick={() => { setChartTimeframe('week'); setSelectedDay(null); }}
                 />
                 <RefinedStatCard
                   label={t(language, 'this_month')}
                   value={getUserSalesCount(selectedUser.id, 'month')}
-                  icon={<CalendarDays />}
-                  color="bg-blue-500"
-                  isActive={chartTimeframe === 'month'}
-                  onClick={() => setChartTimeframe('month')}
-                />
-                <RefinedStatCard
-                  label={t(language, 'phone')}
-                  value={selectedUser.phone?.startsWith('+') ? selectedUser.phone : '+' + selectedUser.phone}
-                  icon={<Phone />}
-                  color="bg-blue-500"
-                />
-                <RefinedStatCard
-                  label={t(language, 'total')}
-                  value={getUserSalesCount(selectedUser.id, 'total')}
                   icon={<Award />}
                   color="bg-blue-500"
+                  isActive={chartTimeframe === 'month'}
+                  onClick={() => { setChartTimeframe('month'); setSelectedDay(null); }}
+                />
+                <RefinedStatCard
+                  label={t(language, 'yearly')}
+                  value={getUserSalesCount(selectedUser.id, 'year')}
+                  icon={<TrendingUp />}
+                  color="bg-blue-500"
                   isActive={chartTimeframe === 'year'}
-                  onClick={() => setChartTimeframe('year')}
+                  onClick={() => { setChartTimeframe('year'); setSelectedDay(null); }}
                 />
               </div>
 
@@ -1343,7 +1408,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         <div className="flex items-center justify-between sm:justify-start gap-1 bg-brand-black p-1 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto mt-2 sm:mt-0">
                           <button
                             onClick={() => {
-                              if (chartTimeframe === 'week') setWeekOffset(prev => prev - 1);
+                              if (chartTimeframe === 'day') setMonitoringDayOffset(prev => prev - 1);
+                              else if (chartTimeframe === 'week') setWeekOffset(prev => prev - 1);
                               else if (chartTimeframe === 'month') setMonthOffset(prev => prev - 1);
                               else if (chartTimeframe === 'year') setSelectedYear(prev => prev - 1);
                             }}
@@ -1352,22 +1418,12 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                             <ChevronLeft className="w-4 h-4" />
                           </button>
                           <span className="text-[10px] font-black text-brand-gold px-2 uppercase tracking-tighter whitespace-nowrap min-w-[120px] text-center">
-                            {chartTimeframe === 'week' ? (
-                              currentChartData.length === 7 ? (() => {
-                                const s = new Date(currentChartData[0].fullDate);
-                                const e = new Date(currentChartData[6].fullDate);
-                                const fmt = (d: Date) => `M${String(d.getMonth() + 1).padStart(2, '0')} ${String(d.getDate()).padStart(2, '0')}`;
-                                return `${fmt(s)} — ${fmt(e)}`;
-                              })() : '...'
-                            ) : chartTimeframe === 'month' ? (
-                              chartTitleLabel
-                            ) : (
-                              selectedYear
-                            )}
+                            {chartTitleLabel}
                           </span>
                           <button
                             onClick={() => {
-                              if (chartTimeframe === 'week') setWeekOffset(prev => prev + 1);
+                              if (chartTimeframe === 'day') setMonitoringDayOffset(prev => prev + 1);
+                              else if (chartTimeframe === 'week') setWeekOffset(prev => prev + 1);
                               else if (chartTimeframe === 'month') setMonthOffset(prev => prev + 1);
                               else if (chartTimeframe === 'year') setSelectedYear(prev => prev + 1);
                             }}
@@ -1496,17 +1552,26 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                           <div className="flex items-center gap-3">
                             <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><Smartphone className="w-5 h-5" /></div>
                             <h3 className="text-lg font-black text-white tracking-tight">
-                              {selectedDay ? (chartTimeframe === 'year' ? `${(() => {
-                                const d = new Date(selectedDay);
-                                const monthName = translations[language].month_names[d.getMonth()];
-                                return `${monthName} ${d.getFullYear()}`;
-                              })()} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
+                              {(() => {
+                                if (selectedDay) {
+                                  if (chartTimeframe === 'year') {
+                                    const d = new Date(selectedDay);
+                                    const monthName = translations[language].month_names[d.getMonth()];
+                                    return `${monthName} ${d.getFullYear()} ${t(language, 'monthly_sales_title')}`;
+                                  }
+                                  return `${selectedDay} ${t(language, 'daily_sales_title')}`;
+                                }
+                                if (chartTimeframe === 'year') return `${selectedYear} ${t(language, 'yearly_sales_title')}`;
+                                if (chartTimeframe === 'month') return `${chartTitleLabel} ${t(language, 'monthly_sales_title')}`;
+                                if (chartTimeframe === 'week') return `${chartTitleLabel} ${t(language, 'weekly_sales_title')}`;
+                                return `${today} ${t(language, 'daily_sales_title')}`;
+                              })()}
                             </h3>
                           </div>
                           
                           <div className="flex flex-wrap items-center gap-3 pl-0 lg:pl-10">
                             {(() => {
-                              const targetDate = selectedDay || today;
+                              const targetDate = selectedDay || (chartTimeframe === 'day' ? monitoringTargetDay : today);
                               let daySales = [];
                               if (selectedDay) {
                                 if (chartTimeframe === 'year') {
@@ -1521,6 +1586,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                 d.setMonth(d.getMonth() + monthOffset);
                                 const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                                 daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                              } else if (chartTimeframe === 'day') {
+                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === monitoringTargetDay);
                               } else {
                                 daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
                               }
@@ -1577,12 +1644,31 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                               } else {
                                 daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
                               }
+                            } else if (chartTimeframe === 'year') {
+                              const yearPrefix = selectedYear.toString();
+                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(yearPrefix));
                             } else if (chartTimeframe === 'month') {
                               const d = new Date();
                               d.setDate(1);
                               d.setMonth(d.getMonth() + monthOffset);
                               const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                               daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                            } else if (chartTimeframe === 'week') {
+                              const d = new Date();
+                              const currentDayIndex = d.getDay();
+                              const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+                              const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (weekOffset * 7));
+                              targetMonday.setHours(0, 0, 0, 0);
+                              const targetSunday = new Date(targetMonday);
+                              targetSunday.setDate(targetMonday.getDate() + 6);
+                              targetSunday.setHours(23, 59, 59, 999);
+                              daySales = state.sales.filter(s => {
+                                const sDate = new Date(s.date);
+                                sDate.setHours(0,0,0,0);
+                                return s.userId === selectedUser.id && sDate >= targetMonday && sDate <= targetSunday;
+                              });
+                            } else if (chartTimeframe === 'day') {
+                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === monitoringTargetDay);
                             } else {
                               daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
                             }
@@ -1644,12 +1730,31 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                           } else {
                             daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
                           }
+                        } else if (chartTimeframe === 'year') {
+                          const yearPrefix = selectedYear.toString();
+                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(yearPrefix));
                         } else if (chartTimeframe === 'month') {
                           const d = new Date();
                           d.setDate(1);
                           d.setMonth(d.getMonth() + monthOffset);
                           const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
                           daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
+                        } else if (chartTimeframe === 'week') {
+                          const d = new Date();
+                          const currentDayIndex = d.getDay();
+                          const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+                          const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (weekOffset * 7));
+                          targetMonday.setHours(0, 0, 0, 0);
+                          const targetSunday = new Date(targetMonday);
+                          targetSunday.setDate(targetMonday.getDate() + 6);
+                          targetSunday.setHours(23, 59, 59, 999);
+                          daySales = state.sales.filter(s => {
+                            const sDate = new Date(s.date);
+                            sDate.setHours(0,0,0,0);
+                            return s.userId === selectedUser.id && sDate >= targetMonday && sDate <= targetSunday;
+                          });
+                        } else if (chartTimeframe === 'day') {
+                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === monitoringTargetDay);
                         } else {
                           daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
                         }
@@ -1718,28 +1823,83 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       <div className="flex items-center gap-3">
                         <div className="p-2.5 bg-brand-gold/10 rounded-xl text-brand-gold"><FileText className="w-5 h-5" /></div>
                         <h3 className="text-lg font-black text-white tracking-tight">
-                          {t(language, 'daily_report')} {selectedDay ? `(${selectedDay})` : `(${t(language, 'today')})`}
+                          {(() => {
+                            if (selectedDay) {
+                                if (chartTimeframe === 'year') {
+                                    const d = new Date(selectedDay);
+                                    const monthName = translations[language].month_names[d.getMonth()];
+                                    return `${monthName} ${d.getFullYear()} Hisobotlari`;
+                                }
+                                return `${selectedDay} Hisoboti`;
+                            }
+                            if (chartTimeframe === 'year') return `${selectedYear} Yillik Hisobotlari`;
+                            if (chartTimeframe === 'month') return `${chartTitleLabel} Oylik Hisobotlari`;
+                            if (chartTimeframe === 'week') return `${chartTitleLabel} Haftalik Hisobotlari`;
+                            if (chartTimeframe === 'day') return `${monitoringTargetDay} Kunlik Hisoboti`;
+                            return `${today} Kunlik Hisoboti`;
+                          })()}
                         </h3>
                       </div>
                     </div>
                     <div className="p-8">
                       {(() => {
-                        const targetDate = selectedDay || today;
-                        const dailyReport = state.reports.find(r => r.userId === selectedUser.id && r.date === targetDate);
+                        let timeframeReports = [];
+                        if (selectedDay) {
+                          if (chartTimeframe === 'year') {
+                            const monthPrefix = selectedDay.substring(0, 7);
+                            timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date.startsWith(monthPrefix));
+                          } else {
+                            timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date === selectedDay);
+                          }
+                        } else if (chartTimeframe === 'year') {
+                          const yearPrefix = selectedYear.toString();
+                          timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date.startsWith(yearPrefix));
+                        } else if (chartTimeframe === 'month') {
+                          const d = new Date();
+                          d.setDate(1);
+                          d.setMonth(d.getMonth() + monthOffset);
+                          const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+                          timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date.startsWith(monthPrefix));
+                        } else if (chartTimeframe === 'week') {
+                          const d = new Date();
+                          const currentDayIndex = d.getDay();
+                          const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
+                          const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (weekOffset * 7));
+                          targetMonday.setHours(0, 0, 0, 0);
+                          const targetSunday = new Date(targetMonday);
+                          targetSunday.setDate(targetMonday.getDate() + 6);
+                          targetSunday.setHours(23, 59, 59, 999);
+                          timeframeReports = state.reports.filter(r => {
+                            const rDate = new Date(r.date);
+                            rDate.setHours(0,0,0,0);
+                            return r.userId === selectedUser.id && rDate >= targetMonday && rDate <= targetSunday;
+                          });
+                        } else if (chartTimeframe === 'day') {
+                          timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date === monitoringTargetDay);
+                        } else {
+                          timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date === today);
+                        }
 
-                        if (!dailyReport) {
+                        if (timeframeReports.length === 0) {
                           return (
                             <div className="flex flex-col items-center py-10 text-center gap-4">
                               <div className="w-14 h-14 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                 <AlertTriangle className="w-8 h-8" />
                               </div>
-                              <p className="text-sm font-black text-white/20 italic">Bu kun uchun hisobot yuborilmagan</p>
+                              <p className="text-sm font-black text-white/20 italic">Bu davr uchun hisobotlar yuborilmagan</p>
                             </div>
                           );
                         }
 
-                        return (
-                          <div className="space-y-10">
+                        return timeframeReports.sort((a, b) => b.timestamp.localeCompare(a.timestamp)).map((dailyReport, idx) => (
+                          <div key={dailyReport.id || idx} className={`${idx > 0 ? 'mt-10 pt-10 border-t border-white/5' : ''} space-y-10`}>
+                            <div className="flex items-center justify-between mb-4">
+                              <div className="flex items-center gap-2">
+                                <Calendar className="w-4 h-4 text-brand-gold" />
+                                <span className="text-sm font-black text-white">{dailyReport.date}</span>
+                              </div>
+                              <span className="text-[10px] font-bold text-white/20">{formatUzTime(dailyReport.timestamp)}</span>
+                            </div>
                             {dailyReport.photos && dailyReport.photos.length > 0 && (
                               <div className="space-y-5">
                                 <div className="flex items-center gap-3 px-2">
@@ -1782,7 +1942,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                               </p>
                             </div>
                           </div>
-                        );
+                        ));
                       })()}
                     </div>
                   </div>
@@ -1961,9 +2121,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                     })()}
                   </div>
 
-                  <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
-                    <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI JOYLAHUV' : 'OXIRGI JOYLAHUV'}
+                  <div className={`${isDarkMode ? 'bg-brand-dark border-white/10' : 'bg-white border-blue-100 shadow-[0_4px_20px_-4px_rgba(59,130,246,0.1)]'} rounded-[2rem] border p-6 transition-all duration-300`}>
+                    <h3 className={`text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2 ${isDarkMode ? 'text-white/30' : 'text-slate-400'}`}>
+                      <MapPin className={`w-4 h-4 ${isDarkMode ? 'text-brand-gold' : 'text-blue-500'}`} /> {selectedDay ? 'KUNDAGI JOYLAHUV' : 'OXIRGI JOYLAHUV'}
                     </h3>
                     {(() => {
                       const targetDate = selectedDay || today;

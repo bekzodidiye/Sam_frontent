@@ -171,7 +171,7 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
       if (selectedUserStatus?.lastKnownLocation?.location_lat && selectedUserStatus?.lastKnownLocation?.location_lng) {
         leafletMap.current.flyTo(
           [selectedUserStatus.lastKnownLocation.location_lat, selectedUserStatus.lastKnownLocation.location_lng],
-          16,
+          14,
           { duration: 1.5 }
         );
       }
