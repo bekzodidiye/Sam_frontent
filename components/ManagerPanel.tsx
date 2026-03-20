@@ -41,6 +41,108 @@ import StaffMap from './StaffMap';
 import { t, Language, translations } from '../translations';
 import { userService, checkInService, saleService, messageService, targetService, ruleService, linkService, settingsService, operatorRatingService } from '../api';
 
+const StatCard = ({ label, value, icon, color, companySales = [], operators = [], isExpanded, onToggle }: any) => {
+  const [currentPage, setCurrentPage] = React.useState(1);
+  const itemsPerPage = 6;
+
+  const operatorSales = useMemo(() => {
+    return operators.map((op: any) => {
+      const sales = companySales.filter((s: any) => s.userId === op.id).reduce((sum: number, s: any) => sum + s.count + (s.bonus || 0), 0);
+      return { ...op, sales };
+    }).sort((a: any, b: any) => b.sales - a.sales);
+  }, [companySales, operators]);
+
+  const totalPages = Math.ceil(operatorSales.length / itemsPerPage);
+  const currentSales = operatorSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
+
+  return (
+    <div className="bg-brand-dark rounded-3xl border border-white/5 shadow-xl transition-all overflow-hidden">
+      <div
+        className="p-4 sm:p-6 flex items-center justify-between group cursor-pointer"
+        onClick={(e) => onToggle(e)}
+      >
+        <div className="flex flex-col justify-center">
+          <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">{label}</p>
+          <p className="text-3xl sm:text-4xl font-black text-white leading-none">{value}</p>
+        </div>
+        <div className="flex items-center gap-3">
+          <div className={`${color} text-white keep-white p-4 sm:p-5 rounded-2xl shadow-2xl transition-all group-hover:scale-110 group-hover:rotate-6`}>
+            {React.cloneElement(icon, { className: 'w-6 h-6 sm:w-7 sm:h-7' })}
+          </div>
+          <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+        </div>
+      </div>
+
+      {/* Dropdown content */}
+      <div
+        className={`transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
+      >
+        <div className="p-4 pt-0 border-t border-white/5 bg-black/20">
+          {operatorSales.length > 0 ? (
+            <div className="flex flex-col gap-2 mt-3 overflow-y-auto custom-scrollbar pr-1">
+              {currentSales.map((op: any) => (
+                <div key={op.id} className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
+                  <div className="flex items-center gap-2">
+                    <div className="w-6 h-6 rounded-lg bg-brand-black flex items-center justify-center text-[10px] font-bold border border-white/10 overflow-hidden shrink-0">
+                      {op.photo ? (
+                        <img src={getMediaUrl(op.photo)} alt={op.firstName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                      ) : (
+                        <>{op.firstName?.[0]}{op.lastName?.[0]}</>
+                      )}
+                    </div>
+                    <span className="text-xs font-bold text-white/80 truncate max-w-[120px]">{op.firstName} {op.lastName}</span>
+                  </div>
+                  <span className="text-sm font-black text-brand-gold">{op.sales}</span>
+                </div>
+              ))}
+              
+              {/* Pagination controls */}
+              {totalPages > 1 && (
+                <div className="flex items-center justify-between mt-4 pb-2">
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.max(1, p - 1)); }}
+                    disabled={currentPage === 1}
+                    className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
+                  >
+                    Oldingi
+                  </button>
+                  <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">{currentPage} / {totalPages}</span>
+                  <button 
+                    onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.min(totalPages, p + 1)); }}
+                    disabled={currentPage === totalPages}
+                    className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
+                  >
+                    Keyingi
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-white/40 text-center mt-3 py-2">Xodimlar yo'q</p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const RefinedStatCard = ({ label, value, icon, color, onClick, isActive }: any) => (
+  <div
+    onClick={onClick}
+    className={`bg-brand-dark p-5 rounded-2xl border-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isActive ? 'ring-4 ring-brand-gold/10 border-brand-gold shadow-xl' : 'border-white/10 shadow-sm hover:border-brand-gold/30'}`}
+  >
+    <div className="flex items-center gap-4">
+      <div className={`${color} text-white p-3 rounded-xl shadow-md`}>{React.cloneElement(icon, { className: 'w-5 h-5' })}</div>
+      <div className="flex-1 min-w-0">
+        <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 truncate ${isActive ? 'text-brand-gold' : 'text-white/40'}`}>{label}</p>
+        <p className="text-lg font-black text-white truncate w-full">
+          {typeof value === 'number' ? value.toLocaleString('uz-UZ') : value}
+        </p>
+      </div>
+    </div>
+  </div>
+);
+
 interface ManagerPanelProps {
   state: AppState;
   setState: React.Dispatch<React.SetStateAction<AppState>>;
@@ -50,10 +152,11 @@ interface ManagerPanelProps {
   refreshData: () => Promise<void>;
   activeTab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating' | 'sales_panel' | 'settings';
   setActiveTab: (tab: 'overview' | 'users' | 'reports' | 'approvals' | 'messages' | 'simcards' | 'monitoring' | 'rating' | 'sales_panel' | 'settings') => void;
+  showNotification: (message: string, type?: 'error' | 'success') => void;
 }
 
 
-const getFormattedDateStr = (d: Date) => {
+const getFormattedDateStr = (d: Date | string | number) => {
   const uzDate = getUzTime(d);
   const y = uzDate.getFullYear();
   const m = String(uzDate.getMonth() + 1).padStart(2, '0');
@@ -240,7 +343,17 @@ const CustomAxisTick = ({ x, y, payload, index }: any) => {
   );
 };
 
-const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab, setActiveTab, isDarkMode, language, calculateAchievements, refreshData }) => {
+const ManagerPanel: React.FC<ManagerPanelProps> = ({ 
+  state, 
+  setState, 
+  activeTab, 
+  setActiveTab, 
+  isDarkMode, 
+  language, 
+  calculateAchievements, 
+  refreshData,
+  showNotification 
+}) => {
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
   const [mapSelectedUserId, setMapSelectedUserId] = useState<string | null>(null);
@@ -356,6 +469,20 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
   const [isPasswordModalOpen, setIsPasswordModalOpen] = useState(false);
   const [passwordFormUserId, setPasswordFormUserId] = useState<string | null>(null);
   const [newPassword, setNewPassword] = useState('');
+
+  const [confirmModal, setConfirmModal] = useState<{
+    isOpen: boolean;
+    title: string;
+    message: string;
+    onConfirm: () => void;
+    type: 'success' | 'danger';
+  }>({
+    isOpen: false,
+    title: '',
+    message: '',
+    onConfirm: () => {},
+    type: 'success'
+  });
 
   // Operator Rating State
   const [ratingStars, setRatingStars] = useState(0); // hover state
@@ -481,8 +608,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
       setIsSalesLinkModalOpen(false);
     } catch (err: any) {
       console.error("Failed to add sales link", err);
-      const errorMsg = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-      alert(`Xatolik yuz berdi: ${errorMsg}`);
+      // Removed alert as per user request
     } finally {
       setIsSalesLinkSubmitting(false);
     }
@@ -496,8 +622,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
       setIsSalesLinkModalOpen(false);
     } catch (err: any) {
       console.error("Failed to update sales link", err);
-      const errorMsg = err.response?.data ? JSON.stringify(err.response.data) : err.message;
-      alert(`Xatolik yuz berdi: ${errorMsg}`);
+      // Removed alert as per user request
     } finally {
       setIsSalesLinkSubmitting(false);
     }
@@ -534,7 +659,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
     const data = [];
 
     if (timeframe === 'week') {
-      const d = new Date();
+      const d = getUzTime();
       const currentDayIndex = d.getDay();
       const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
       const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (wOffset * 7));
@@ -555,7 +680,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
         });
       }
     } else if (timeframe === 'month') {
-      const d = new Date();
+      const d = getUzTime();
       d.setDate(1);
       d.setMonth(d.getMonth() + mOffset);
       const year = d.getFullYear();
@@ -620,7 +745,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
     setSelectedDay(null);
     setWeekOffset(0);
     setMonthOffset(0);
-    setSelectedYear(new Date().getFullYear());
+    setSelectedYear(getUzTime().getFullYear());
   };
 
   useEffect(() => {
@@ -635,7 +760,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
     let filteredSales = state.sales.filter(s => s.userId === selectedUserId);
 
     if (chartTimeframe === 'week') {
-      const d = new Date();
+      const d = getUzTime();
       const currentDayIndex = d.getDay();
       const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
       const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (weekOffset * 7));
@@ -680,7 +805,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
     let filteredSales = state.sales;
 
     if (monitoringTimeframe === 'week') {
-      const d = new Date();
+      const d = getUzTime();
       const currentDayIndex = d.getDay();
       const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
       const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
@@ -711,7 +836,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
   const monitoringChartData = useMemo(() => {
     const data = [];
     if (monitoringTimeframe === 'week') {
-      const d = new Date();
+      const d = getUzTime();
       const currentDayIndex = d.getDay();
       const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
       const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
@@ -1553,7 +1678,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
         <div className="space-y-6 animate-in fade-in">
           <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
             <h2 className="text-2xl font-black text-white">{t(language, 'staff_team')}</h2>
-            <div className="flex items-center gap-4 w-full md:w-auto">
+            <div className="flex items-center gap-4 w-full md:w-96">
               <div className="relative w-full md:w-96">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
                 <input type="text" placeholder="Xodimni qidirish..." className="w-full pl-10 pr-4 py-3 border border-white/10 rounded-2xl bg-brand-black focus:border-brand-gold transition outline-none text-white font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
@@ -3024,7 +3149,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                 <div className="bg-brand-black rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 max-w-2xl w-full shadow-2xl border border-white/10 animate-in zoom-in-95 duration-300">
                   <div className="flex items-center justify-between mb-6">
                     <h3 className="text-lg sm:text-xl font-black text-white min-w-0 flex-1 truncate pr-4">
-                      {inventoryModalUser.nickname || inventoryModalUser.phone} - {t(language, 'sim_inventory')}
+                      {inventoryModalUser.nickname || (inventoryModalUser.phone && (inventoryModalUser.phone.startsWith('+') ? inventoryModalUser.phone : `+${inventoryModalUser.phone}`))} - {t(language, 'sim_inventory')}
                     </h3>
                     <button onClick={() => setInventoryModalUser(null)} className="p-2 hover:bg-white/5 rounded-full transition"><X className="w-5 h-5 text-white/30" /></button>
                   </div>
@@ -3173,7 +3298,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                           )}
                         </div>
                         <div className="min-w-0">
-                          <h4 className="text-lg sm:text-2xl font-black text-white leading-none mb-1 group-hover:text-brand-gold transition-colors truncate">{user.nickname || user.phone}</h4>
+                          <h4 className="text-lg sm:text-2xl font-black text-white leading-none mb-1 group-hover:text-brand-gold transition-colors truncate">{user.nickname || (user.phone && (user.phone.startsWith('+') ? user.phone : `+${user.phone}`))}</h4>
                           <p className="text-[9px] sm:text-[10px] font-bold text-white/30 uppercase tracking-widest">{t(language, 'operator')}</p>
                         </div>
                       </div>
@@ -3248,7 +3373,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                 {pendingUsers.map(u => (
                   <div key={u.id} className="bg-brand-dark p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 flex flex-col justify-between shadow-sm gap-4 overflow-hidden">
                     <div className="flex items-center gap-3 sm:gap-4 min-w-0 w-full">
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-brand-gold/10 text-brand-gold rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0">{u.firstName?.[0]}</div>
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-brand-gold/10 text-brand-gold rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0 overflow-hidden border border-white/10">
+                        {u.photo ? (
+                          <img src={getMediaUrl(u.photo)} alt={u.firstName} className="w-full h-full object-cover" />
+                        ) : (
+                          u.firstName?.[0]
+                        )}
+                      </div>
                       <div className="min-w-0">
                         <h4 className="text-base sm:text-lg font-black text-white leading-none mb-1 truncate">{u.firstName} {u.lastName}</h4>
                         <p className="text-[10px] sm:text-xs text-white/50 font-mono mt-1 flex items-center gap-2">
@@ -3266,9 +3397,39 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                         </p>
                       </div>
                     </div>
-                    <button onClick={() => handleApproveUser(u.id)} className="w-full p-3 sm:p-4 bg-brand-gold text-brand-black rounded-xl sm:rounded-2xl shadow-xl shadow-brand-gold/20 transition hover:bg-brand-gold/90 flex justify-center items-center mt-2">
-                      <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />
-                    </button>
+                    <div className="flex gap-3 mt-2">
+                      <button 
+                        onClick={() => {
+                          setConfirmModal({
+                            isOpen: true,
+                            title: t(language, 'confirm_approve'),
+                            message: `${u.firstName} ${u.lastName} operator sifatida tizimga kiritiladi. Tasdiqlaysizmi?`,
+                            type: 'success',
+                            onConfirm: () => handleApproveUser(u.id)
+                          });
+                        }} 
+                        className="flex-1 p-3 sm:p-4 bg-brand-gold text-brand-black rounded-xl sm:rounded-2xl shadow-xl shadow-brand-gold/20 transition hover:bg-brand-gold/90 flex justify-center items-center"
+                      >
+                        <CheckCircle className="w-5 h-5 sm:w-6 sm:h-6" />
+                      </button>
+                      <button 
+                        onClick={() => {
+                          setConfirmModal({
+                            isOpen: true,
+                            title: t(language, 'confirm_delete'),
+                            message: `${u.firstName} ${u.lastName} so'rovi tizimdan butunlay o'chiriladi. Rad etasizmi?`,
+                            type: 'danger',
+                            onConfirm: () => {
+                              userService.deleteUser(u.id).then(() => refreshData());
+                            }
+                          });
+                        }} 
+                        className="p-3 sm:p-4 bg-red-500/10 text-red-500 border border-red-500/20 rounded-xl sm:rounded-2xl shadow-xl transition hover:bg-red-500/20 flex justify-center items-center"
+                        title={t(language, 'reject')}
+                      >
+                        <X className="w-5 h-5 sm:w-6 sm:h-6" />
+                      </button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -3286,10 +3447,16 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                 {approvedUsers.slice((approvalsPage - 1) * approvalsPerPage, approvalsPage * approvalsPerPage).map(u => (
                   <div key={u.id} className="bg-brand-dark p-4 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 flex flex-col shadow-sm gap-4 overflow-hidden">
                     <div className="flex items-center gap-3 sm:gap-4 min-w-0 w-full">
-                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/5 text-white/50 rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0">{u.firstName?.[0]}</div>
+                      <div className="w-12 h-12 sm:w-14 sm:h-14 bg-white/5 text-white/50 rounded-xl sm:rounded-2xl flex items-center justify-center font-black text-lg sm:text-xl shrink-0 overflow-hidden border border-white/10">
+                        {u.photo ? (
+                          <img src={getMediaUrl(u.photo)} alt={u.firstName} className="w-full h-full object-cover" />
+                        ) : (
+                          u.firstName?.[0]
+                        )}
+                      </div>
                       <div className="min-w-0 flex-1">
                         <h4 className="text-base sm:text-lg font-black text-white leading-none mb-1 truncate">{u.firstName} {u.lastName}</h4>
-                        <p className="text-[10px] sm:text-xs text-white/30 font-bold truncate">@{u.nickname || u.phone}</p>
+                        <p className="text-[10px] sm:text-xs text-white/30 font-bold truncate">@{u.nickname || (u.phone && (u.phone.startsWith('+') ? u.phone : `+${u.phone}`))}</p>
                         <div className="text-[10px] sm:text-xs text-white/50 font-mono mt-1 flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg w-fit">
                           <span className="text-white/20 uppercase tracking-tighter mr-1 text-[9px]">Parol:</span> 
                           <span className="text-brand-gold font-bold">
@@ -3755,80 +3922,90 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                         className="hidden"
                         onChange={e => {
                           const file = e.target.files?.[0];
-                          if (file) {
-                            const reader = new FileReader();
-                            reader.onloadend = () => {
-                              setSalesLinkForm({ ...salesLinkForm, image: reader.result as string });
-                            };
-                            reader.readAsDataURL(file);
-                          }
+                              if (file) {
+                                if (file.size > 10 * 1024 * 1024) {
+                                  showNotification("Rasm hajmi 10MB dan oshmasligi kerak!");
+                                  return;
+                                }
+                                const reader = new FileReader();
+                                reader.onloadend = () => setSalesLinkForm(prev => ({ ...prev, image: reader.result as string }));
+                                reader.readAsDataURL(file);
+                              }
                         }}
                       />
                     </label>
-                    {salesLinkForm.image && (
-                      <button
-                        onClick={() => setSalesLinkForm({ ...salesLinkForm, image: '' })}
-                        className="text-[10px] text-red-500 font-bold uppercase tracking-widest mt-3 hover:underline"
-                      >
-                        Rasmni o'chirish
-                      </button>
-                    )}
+                  </div>
                   </div>
 
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Nomi</label>
-                    <input
-                      type="text"
-                      value={salesLinkForm.name}
-                      onChange={e => setSalesLinkForm({ ...salesLinkForm, name: e.target.value })}
-                      placeholder="Masalan: Ucell"
-                      className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Desktop URL</label>
-                    <input
-                      type="text"
-                      value={salesLinkForm.url}
-                      onChange={e => setSalesLinkForm({ ...salesLinkForm, url: e.target.value })}
-                      placeholder="https://example.com"
-                      className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
-                    />
-                  </div>
-
-                  <div className="space-y-1.5">
-                    <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Mobile URL (ixtiyoriy)</label>
-                    <input
-                      type="text"
-                      value={salesLinkForm.mobileUrl || ''}
-                      onChange={e => setSalesLinkForm({ ...salesLinkForm, mobileUrl: e.target.value })}
-                      placeholder="https://example.com"
-                      className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
-                    />
-                  </div>
-
-                  <button
-                    disabled={isSalesLinkSubmitting || !salesLinkForm.name || !salesLinkForm.url}
-                    onClick={() => {
-                      if (editingSalesLinkId) {
-                        handleUpdateSalesLink(editingSalesLinkId, salesLinkForm);
-                      } else {
-                        handleAddSalesLink(salesLinkForm);
+                  {(() => {
+                    const validateUrl = (url: string) => {
+                      if (!url) return true;
+                      try {
+                        const parsed = new URL(url);
+                        return (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+                      } catch (e) {
+                        return false;
                       }
-                    }}
-                    className={`w-full py-5 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all mt-6 ${(isSalesLinkSubmitting || !salesLinkForm.name || !salesLinkForm.url) ? 'opacity-50 cursor-not-allowed' : ''}`}
-                  >
-                    {isSalesLinkSubmitting ? (
-                      <div className="flex items-center justify-center gap-2">
-                        <div className="w-4 h-4 border-2 border-brand-black/30 border-t-brand-black rounded-full animate-spin"></div>
-                        Saqlanmoqda...
-                      </div>
-                    ) : (
-                      editingSalesLinkId ? 'Saqlash' : 'Qo\'shish'
-                    )}
-                  </button>
-                </div>
+                    };
+
+                    const isUrlValid = validateUrl(salesLinkForm.url);
+                    const isFormValid = salesLinkForm.name && salesLinkForm.url && isUrlValid;
+
+                    return (
+                      <>
+                        <div className="space-y-1.5">
+                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Nomi</label>
+                          <input
+                            type="text"
+                            value={salesLinkForm.name}
+                            onChange={e => setSalesLinkForm({ ...salesLinkForm, name: e.target.value })}
+                            placeholder="Masalan: Ucell"
+                            className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
+                          />
+                        </div>
+
+                        <div className="space-y-1.5">
+                          <div className="flex items-center justify-between ml-4 mr-2">
+                            <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">URL</label>
+                            {!isUrlValid && salesLinkForm.url && (
+                              <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter animate-pulse">Xato URL kiritdingiz!</span>
+                            )}
+                          </div>
+                          <input
+                            type="text"
+                            value={salesLinkForm.url}
+                            onChange={e => setSalesLinkForm({ ...salesLinkForm, url: e.target.value })}
+                            placeholder="https://example.com"
+                            className={`w-full p-4 rounded-2xl outline-none transition font-bold ${!isUrlValid && salesLinkForm.url ? 'border-2 !border-red-500 text-red-500 bg-red-500/10 focus:!border-red-500 focus:!ring-0' : 'border border-white/10 bg-brand-black focus:bg-brand-dark text-white focus:border-brand-gold'}`}
+                          />
+                          {!isUrlValid && salesLinkForm.url && (
+                             <p className="text-[7px] text-red-500/60 font-medium ml-4 uppercase">Masalan: https://google.com (protokol shart)</p>
+                          )}
+                        </div>
+
+                        <button
+                          disabled={isSalesLinkSubmitting || !isFormValid}
+                          onClick={() => {
+                            if (editingSalesLinkId) {
+                              handleUpdateSalesLink(editingSalesLinkId, salesLinkForm);
+                            } else {
+                              handleAddSalesLink(salesLinkForm);
+                            }
+                          }}
+                          className={`w-full py-5 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all mt-6 ${(isSalesLinkSubmitting || !isFormValid) ? 'opacity-30 grayscale cursor-not-allowed' : ''}`}
+                        >
+                          {isSalesLinkSubmitting ? (
+                            <div className="flex items-center justify-center gap-2">
+                              <div className="w-4 h-4 border-2 border-brand-black/30 border-t-brand-black rounded-full animate-spin"></div>
+                              Saqlanmoqda...
+                            </div>
+                          ) : (
+                            editingSalesLinkId ? 'Saqlash' : 'Qo\'shish'
+                          )}
+                        </button>
+                      </>
+                    );
+                  })()}
               </div>
             </div>
           )}
@@ -4262,7 +4439,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
                                   </div>
                                   <div className="min-w-0">
                                     <p className="text-[10px] sm:text-xs font-bold text-white truncate">{u.firstName} {u.lastName}</p>
-                                    <p className="text-[8px] sm:text-[9px] text-white/30 truncate">{u.phone}</p>
+                                    <p className="text-[8px] sm:text-[9px] text-white/30 truncate">{u.phone && (u.phone.startsWith('+') ? u.phone : `+${u.phone}`)}</p>
                                   </div>
                                 </div>
                                 <button
@@ -4478,8 +4655,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
               </div>
             </div>
           </div>
-        )
-      }
+        )}
+      
 
       <style>{`
         .custom-scrollbar::-webkit-scrollbar { width: 5px; } 
@@ -4681,110 +4858,65 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({ state, setState, activeTab,
           </div>
         )}
       </AnimatePresence>
+
+      <AnimatePresence>
+        {confirmModal.isOpen && (
+          <div className="fixed inset-0 z-[300] flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-brand-black/90 backdrop-blur-xl"
+              onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+            />
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 20 }}
+              className="bg-brand-dark w-full max-w-sm rounded-[2rem] border border-white/10 shadow-2xl relative z-10 overflow-hidden"
+            >
+              <div className="p-8 space-y-6">
+                <div className="flex flex-col items-center gap-4 text-center">
+                  <div className={`w-16 h-16 rounded-3xl flex items-center justify-center relative overflow-hidden border border-white/10 ${
+                    confirmModal.type === 'success' ? 'bg-brand-gold/10 text-brand-gold' : 'bg-red-500/10 text-red-500'
+                  }`}>
+                    {confirmModal.type === 'success' ? <CheckCircle className="w-8 h-8" /> : <X className="w-8 h-8" />}
+                  </div>
+                  <div>
+                    <h3 className="text-xl font-black text-white">{confirmModal.title}</h3>
+                    <p className="text-sm font-medium text-white/60 mt-2">{confirmModal.message}</p>
+                  </div>
+                </div>
+
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
+                    className="flex-1 py-4 bg-white/5 text-white/60 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all"
+                  >
+                    Bekor qilish
+                  </button>
+                  <button
+                    onClick={() => {
+                      confirmModal.onConfirm();
+                      setConfirmModal(prev => ({ ...prev, isOpen: false }));
+                    }}
+                    className={`flex-1 py-4 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg transition-all ${
+                      confirmModal.type === 'success' 
+                        ? 'bg-brand-gold text-brand-black shadow-brand-gold/20 hover:scale-[1.02] active:scale-95' 
+                        : 'bg-red-500 text-white shadow-red-500/20 hover:scale-[1.02] active:scale-95'
+                    }`}
+                  >
+                    Ha
+                  </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div >
   );
 };
 
-const StatCard = ({ label, value, icon, color, companySales = [], operators = [], isExpanded, onToggle }: any) => {
-  const [currentPage, setCurrentPage] = React.useState(1);
-  const itemsPerPage = 6;
-
-  const operatorSales = useMemo(() => {
-    return operators.map((op: any) => {
-      const sales = companySales.filter((s: any) => s.userId === op.id).reduce((sum: number, s: any) => sum + s.count + (s.bonus || 0), 0);
-      return { ...op, sales };
-    }).sort((a: any, b: any) => b.sales - a.sales);
-  }, [companySales, operators]);
-
-  const totalPages = Math.ceil(operatorSales.length / itemsPerPage);
-  const currentSales = operatorSales.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
-
-  return (
-    <div className="bg-brand-dark rounded-3xl border border-white/5 shadow-xl transition-all overflow-hidden">
-      <div
-        className="p-4 sm:p-6 flex items-center justify-between group cursor-pointer"
-        onClick={(e) => onToggle(e)}
-      >
-        <div className="flex flex-col justify-center">
-          <p className="text-[9px] font-black text-white/40 uppercase tracking-widest mb-1">{label}</p>
-          <p className="text-3xl sm:text-4xl font-black text-white leading-none">{value}</p>
-        </div>
-        <div className="flex items-center gap-3">
-          <div className={`${color} text-white keep-white p-4 sm:p-5 rounded-2xl shadow-2xl transition-all group-hover:scale-110 group-hover:rotate-6`}>
-            {React.cloneElement(icon, { className: 'w-6 h-6 sm:w-7 sm:h-7' })}
-          </div>
-          <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-        </div>
-      </div>
-
-      {/* Dropdown content */}
-      <div
-        className={`transition-all duration-300 ease-in-out overflow-hidden ${isExpanded ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'}`}
-      >
-        <div className="p-4 pt-0 border-t border-white/5 bg-black/20">
-          {operatorSales.length > 0 ? (
-            <div className="flex flex-col gap-2 mt-3 overflow-y-auto custom-scrollbar pr-1">
-              {currentSales.map((op: any) => (
-                <div key={op.id} className="flex items-center justify-between bg-white/5 p-2 rounded-xl">
-                  <div className="flex items-center gap-2">
-                    <div className="w-6 h-6 rounded-lg bg-brand-black flex items-center justify-center text-[10px] font-bold border border-white/10 overflow-hidden shrink-0">
-                      {op.photo ? (
-                        <img src={getMediaUrl(op.photo)} alt={op.firstName} className="w-full h-full object-cover" referrerPolicy="no-referrer" />
-                      ) : (
-                        <>{op.firstName?.[0]}{op.lastName?.[0]}</>
-                      )}
-                    </div>
-                    <span className="text-xs font-bold text-white/80 truncate max-w-[120px]">{op.firstName} {op.lastName}</span>
-                  </div>
-                  <span className="text-sm font-black text-brand-gold">{op.sales}</span>
-                </div>
-              ))}
-              
-              {/* Pagination controls */}
-              {totalPages > 1 && (
-                <div className="flex items-center justify-between mt-4 pb-2">
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.max(1, p - 1)); }}
-                    disabled={currentPage === 1}
-                    className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
-                  >
-                    Oldingi
-                  </button>
-                  <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">{currentPage} / {totalPages}</span>
-                  <button 
-                    onClick={(e) => { e.stopPropagation(); setCurrentPage(p => Math.min(totalPages, p + 1)); }}
-                    disabled={currentPage === totalPages}
-                    className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
-                  >
-                    Keyingi
-                  </button>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-white/40 text-center mt-3 py-2">Xodimlar yo'q</p>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-};
-
-const RefinedStatCard = ({ label, value, icon, color, onClick, isActive }: any) => (
-  <div
-    onClick={onClick}
-    className={`bg-brand-dark p-5 rounded-2xl border-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isActive ? 'ring-4 ring-brand-gold/10 border-brand-gold shadow-xl' : 'border-white/10 shadow-sm hover:border-brand-gold/30'}`}
-  >
-    <div className="flex items-center gap-4">
-      <div className={`${color} text-white p-3 rounded-xl shadow-md`}>{React.cloneElement(icon, { className: 'w-5 h-5' })}</div>
-      <div className="flex-1 min-w-0">
-        <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 truncate ${isActive ? 'text-brand-gold' : 'text-white/40'}`}>{label}</p>
-        <p className="text-lg font-black text-white truncate w-full">
-          {typeof value === 'number' ? value.toLocaleString('uz-UZ') : value}
-        </p>
-      </div>
-    </div>
-  </div>
-);
 
 export default ManagerPanel;

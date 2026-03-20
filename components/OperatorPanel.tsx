@@ -79,6 +79,7 @@ interface OperatorPanelProps {
   language: Language;
   refreshData: () => Promise<void>;
   isDarkMode: boolean;
+  showNotification: (message: string, type?: 'error' | 'success') => void;
 }
 
 const CustomAxisTick = ({ x, y, payload, index }: any) => {
@@ -289,7 +290,7 @@ const RefinedStatCard = ({ label, value, icon, color, onClick, isActive }: any) 
   </div>
 );
 
-const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, activeTab, language, refreshData, isDarkMode }) => {
+const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, activeTab, language, refreshData, isDarkMode, showNotification }) => {
   const formatLargeNumber = (val: any) => {
     const num = Number(val);
     if (isNaN(num)) return '0';
@@ -403,6 +404,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
   const handleProfilePhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        showNotification("Profil rasmi hajmi 10MB dan oshmasligi kerak!");
+        if (profilePhotoInputRef.current) profilePhotoInputRef.current.value = '';
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setProfileForm(prev => ({ ...prev, photo: reader.result as string }));
@@ -624,6 +630,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (file.size > 10 * 1024 * 1024) {
+        showNotification("Rasm hajmi 10MB dan oshmasligi kerak!");
+        if (fileInputRef.current) fileInputRef.current.value = '';
+        return;
+      }
       const reader = new FileReader();
       reader.onloadend = () => setCapturedPhoto(reader.result as string);
       reader.readAsDataURL(file);
@@ -632,8 +643,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
 
   const handleReportPhotoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
+    let hasError = false;
     if (files) {
       Array.from(files).forEach((file: File) => {
+        if (file.size > 10 * 1024 * 1024) {
+          showNotification(`${file.name}: Rasm hajmi 10MB dan oshmasligi kerak!`);
+          hasError = true;
+          return;
+        }
         const reader = new FileReader();
         reader.onloadend = () => {
           setReportPhotos(prev => [...prev, reader.result as string]);
@@ -641,8 +658,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
         reader.readAsDataURL(file);
       });
     }
-    // Reset input value so same file can be uploaded again if needed
-    e.target.value = '';
+    if (hasError && reportPhotoInputRef.current) {
+      reportPhotoInputRef.current.value = '';
+    } else {
+      e.target.value = '';
+    }
   };
 
   const removeReportPhoto = (index: number) => {
@@ -2622,15 +2642,33 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
           );
         }
 
-        const checkInForToday = state.checkIns.find(c => c.userId === user.id && c.date === today);
+        const checkInForToday = state.checkIns.find(c => c.userId === user.id && isDateMatch(c.timestamp, today));
 
         return (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="w-full">
 
               {/* Header */}
-              <div className="mb-6">
-                {/* Space for top bar elements if needed, but Ishni yakunlash removed */}
+              <div className="mb-6 flex items-center justify-between">
+                <div></div>
+                {checkInForToday && !checkInForToday.checkOutTime && !hasReported && (
+                  <button
+                    onClick={() => {
+                      refreshLocation();
+                      setIsEndDayModalOpen(true);
+                    }}
+                    className="px-6 py-3 gold-gradient text-brand-black rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
+                  >
+                    <LogOutIcon className="w-4 h-4" />
+                    Ishni yakunlash (Finish)
+                  </button>
+                )}
+                {hasReported && (
+                   <div className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-xl">
+                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                      <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Ish yakunlandi</span>
+                   </div>
+                )}
               </div>
 
               <div className="mb-6">
@@ -3070,26 +3108,122 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                     <h2 className="font-black text-white/40 text-[8px] sm:text-[9px] uppercase tracking-widest mb-4 sm:mb-6 flex items-center gap-2"><History className="w-4 h-4 text-brand-gold" /> BUGUNGI DAVOMAT</h2>
 
                     <div className="space-y-4 sm:space-y-5">
-                      {userCheckIn ? (() => {
+                      {hasReported ? (() => {
+                        const todayStr = getTodayStr();
+                        const existingRating = state.operatorRatings?.find(
+                          r => r.operatorId === user.id && r.date === todayStr
+                        );
+
+                        return (
+                          <div className="py-8 flex flex-col items-center justify-center text-center animate-in fade-in zoom-in duration-700">
+                            <div className="w-20 h-20 bg-green-500/10 rounded-[2rem] flex items-center justify-center text-green-500 mb-6 border border-green-500/20 shadow-2xl relative">
+                              <div className="absolute inset-0 bg-green-500/5 rounded-[2rem] animate-ping opacity-20" />
+                              <CheckCircle2 className="w-10 h-10 relative z-10" />
+                            </div>
+                            <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2">Ish muvaffaqiyatli yakunlandi</h3>
+                            
+                            {existingRating ? (
+
+                              <div className="w-full bg-brand-black/50 border border-brand-gold/20 rounded-[2rem] p-6 animate-in slide-in-from-bottom-4 duration-700">
+                                <div className="flex items-center justify-center gap-1 mb-3">
+                                  {[1, 2, 3, 4, 5].map(star => (
+                                    <Star 
+                                      key={star} 
+                                      className={`w-5 h-5 ${star <= existingRating.stars ? 'text-brand-gold fill-brand-gold' : 'text-white/10'}`} 
+                                    />
+                                  ))}
+                                </div>
+                                <p className="text-[10px] font-black text-brand-gold uppercase tracking-widest mb-3">Manager bahosi</p>
+                                {existingRating.comment && (
+                                  <div className="px-4 py-3 bg-white/5 rounded-2xl border border-white/5 italic text-xs text-white/70">
+                                    "{existingRating.comment}"
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <div className="px-6 py-4 bg-yellow-500/10 border border-yellow-500/20 rounded-[1.5rem] flex flex-col gap-2 items-center">
+                                <div className="p-2 bg-yellow-500/20 rounded-lg text-yellow-500">
+                                  <Clock className="w-4 h-4 animate-spin-slow" />
+                                </div>
+                                <span className="text-[9px] font-black text-yellow-500 uppercase tracking-widest text-center leading-relaxed">
+                                  Manager tomonidan hisobotingiz baholanishi kutilmoqda
+                                </span>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })() : userCheckIn ? (() => {
                         const checkTime = formatUzTime(userCheckIn.timestamp);
                         const isLate = !!lateness?.isLate;
                         const { start } = getWorkingTimes();
                         const boxStyle = isLate ? 'bg-red-600 dark:bg-red-500/10 border-red-500/20' : 'bg-green-600 dark:bg-green-500/10 border-green-500/20';
 
                         return (
-                          <div className={`p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border-2 transition-all flex flex-col gap-3 ${boxStyle}`}>
-                            <div className="flex items-center justify-between">
-                              <div className="flex items-center gap-3 sm:gap-4">
-                                <div className={`p-3 sm:p-4 rounded-xl sm:2xl shadow-md ${isLate ? 'bg-white text-red-600 dark:bg-red-600 dark:text-white' : 'bg-white text-green-600 dark:bg-green-600 dark:text-white'}`}><LogIn className="w-5 h-5 sm:w-6 sm:h-6" /></div>
-                                <div>
-                                  <div className="flex items-center gap-2 mb-0.5">
-                                    <p className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest ${isLate ? '!text-white keep-white dark:!text-red-500' : '!text-white keep-white dark:!text-green-500'}`}>Kelish</p>
-                                    <span className="text-[7px] sm:text-[8px] font-bold opacity-60 text-white keep-white">({start})</span>
-                                    {isLate && (
-                                      <div className="bg-red-600 text-white keep-white text-[7px] sm:text-[8px] font-black px-1.5 sm:px-2 py-0.5 rounded-full uppercase tracking-tighter animate-pulse shadow-md ring-1 sm:ring-2 ring-white">LATE</div>
+                          <>
+                            <div className={`p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border-2 transition-all flex flex-col gap-3 ${boxStyle}`}>
+                              <div className="flex items-center justify-between">
+                                <div className="flex items-center gap-3 sm:gap-4">
+                                  <div className={`p-3 sm:p-4 rounded-xl sm:2xl shadow-md ${isLate ? 'bg-white text-red-600 dark:bg-red-600 dark:text-white' : 'bg-white text-green-600 dark:bg-green-600 dark:text-white'}`}><LogIn className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                                  <div>
+                                    <div className="flex items-center gap-2 mb-0.5">
+                                      <p className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest ${isLate ? '!text-white keep-white dark:!text-red-500' : '!text-white keep-white dark:!text-green-500'}`}>Kelish</p>
+                                      <span className="text-[7px] sm:text-[8px] font-bold opacity-60 text-white keep-white">({start})</span>
+                                      {isLate && (
+                                        <div className="bg-red-600 text-white keep-white text-[7px] sm:text-[8px] font-black px-1.5 sm:px-2 py-0.5 rounded-full uppercase tracking-tighter animate-pulse shadow-md ring-1 sm:ring-2 ring-white">LATE</div>
+                                      )}
+                                    </div>
+                                    {editingTime?.type === 'checkIn' ? (
+                                      <div className="flex items-center gap-2 mt-1">
+                                        <input
+                                          type="time"
+                                          value={newTime}
+                                          lang="en-GB"
+                                          step="60"
+                                          onFocus={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
+                                          onClick={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
+                                          onChange={e => setNewTime(e.target.value)}
+                                          className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-base sm:text-lg font-bold w-28 sm:w-32 outline-none focus:border-brand-gold text-white"
+                                          autoFocus
+                                        />
+                                        <button
+                                          onClick={() => {
+                                            if (newTime) {
+                                              const { end } = getWorkingTimes();
+                                              const newWh = `${newTime}-${end}`;
+                                              handleCheckIn({ ...user.location }, { workingHours: newWh }); // Simplified rename call logic
+                                              setEditingTime(null);
+                                            }
+                                          }}
+                                          className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition shadow-sm"
+                                        >
+                                          <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                        </button>
+                                        <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>
+                                      </div>
+                                    ) : (
+                                      <p className={`text-xl sm:text-2xl font-black tracking-tight ${isLate ? '!text-white keep-white dark:!text-red-500' : '!text-white keep-white'}`}>{checkTime}</p>
                                     )}
                                   </div>
-                                  {editingTime?.type === 'checkIn' ? (
+                                </div>
+                                <button onClick={() => setIsEditingCheckIn(true)} className="p-2.5 sm:p-3 bg-white text-green-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"><Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>
+                              </div>
+                              {isLate && editingTime?.type !== 'checkIn' && (
+                                <div className="mt-1 flex items-center gap-2 bg-red-600 text-white keep-white p-2.5 sm:p-3 rounded-xl sm:2xl text-[8px] sm:text-[10px] font-black uppercase animate-in slide-in-from-top-2 duration-300">
+                                  <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                                  <span>{lateness?.durationStr} kechikish (LATE)</span>
+                                </div>
+                              )}
+                            </div>
+
+                            <div className={`p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border flex items-center justify-between bg-blue-600 dark:bg-blue-500/10 border-blue-500/20`}>
+                              <div className="flex items-center gap-3 sm:gap-4">
+                                <div className={`p-3 sm:p-3.5 rounded-xl shadow-md bg-white text-blue-600 dark:bg-blue-600 dark:text-white`}><LogOut className="w-5 h-5 sm:w-6 sm:h-6" /></div>
+                                <div>
+                                  <div className="flex items-center gap-2 mb-1">
+                                    <p className="text-[8px] sm:text-[9px] font-black !text-white keep-white dark:!text-white/30 uppercase tracking-widest">Ketish</p>
+                                    <span className="text-[7px] sm:text-[8px] font-bold opacity-60 text-white keep-white">({getWorkingTimes().end})</span>
+                                  </div>
+                                  {editingTime?.type === 'checkOut' ? (
                                     <div className="flex items-center gap-2 mt-1">
                                       <input
                                         type="time"
@@ -3105,8 +3239,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                       <button
                                         onClick={() => {
                                           if (newTime) {
-                                            const { end } = getWorkingTimes();
-                                            const newWh = `${newTime}-${end}`;
+                                            const { start } = getWorkingTimes();
+                                            const newWh = `${start}-${newTime}`;
                                             handleCheckIn({ ...user.location }, { workingHours: newWh }); // Simplified rename call logic
                                             setEditingTime(null);
                                           }
@@ -3118,20 +3252,23 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                       <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>
                                     </div>
                                   ) : (
-                                    <p className={`text-xl sm:text-2xl font-black tracking-tight ${isLate ? '!text-white keep-white dark:!text-red-500' : '!text-white keep-white'}`}>{checkTime}</p>
+                                    <p className="text-xl sm:text-2xl font-black !text-white/50 keep-white dark:!text-white/30 truncate">Hali ketmagan</p>
                                   )}
                                 </div>
                               </div>
-                              {!hasReported && <button onClick={() => setIsEditingCheckIn(true)} className="p-2.5 sm:p-3 bg-white text-green-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"><Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>}
-                              {hasReported && <button onClick={() => setIsEditingCheckIn(true)} className="p-2.5 sm:p-3 bg-white text-green-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"><Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>}
+                              {checkInForToday && !checkInForToday.checkOutTime && (
+                                <button
+                                  onClick={() => {
+                                    refreshLocation();
+                                    setIsEndDayModalOpen(true);
+                                  }}
+                                  className="p-2.5 sm:p-3 bg-white text-blue-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"
+                                >
+                                  <LogOutIcon className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
+                                </button>
+                              )}
                             </div>
-                            {isLate && editingTime?.type !== 'checkIn' && (
-                              <div className="mt-1 flex items-center gap-2 bg-red-600 text-white keep-white p-2.5 sm:p-3 rounded-xl sm:2xl text-[8px] sm:text-[10px] font-black uppercase animate-in slide-in-from-top-2 duration-300">
-                                <AlertTriangle className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                <span>{lateness?.durationStr} kechikish (LATE)</span>
-                              </div>
-                            )}
-                          </div>
+                          </>
                         );
                       })() : (
                         <div className="p-6 rounded-2xl sm:rounded-[2rem] border border-white/10 bg-white/5 text-white/40 italic text-center text-xs sm:text-sm">
@@ -3139,80 +3276,13 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         </div>
                       )}
 
-                      <div className={`p-4 sm:p-6 rounded-2xl sm:rounded-[2rem] border flex items-center justify-between bg-blue-600 dark:bg-blue-500/10 border-blue-500/20`}>
-                        <div className="flex items-center gap-3 sm:gap-4">
-                          <div className={`p-3 sm:p-3.5 rounded-xl shadow-md bg-white text-blue-600 dark:bg-blue-600 dark:text-white`}><LogOut className="w-5 h-5 sm:w-6 sm:h-6" /></div>
-                          <div>
-                            <div className="flex items-center gap-2 mb-1">
-                              <p className="text-[8px] sm:text-[9px] font-black !text-white keep-white dark:!text-white/30 uppercase tracking-widest">Ketish</p>
-                              <span className="text-[7px] sm:text-[8px] font-bold opacity-60 text-white keep-white">({getWorkingTimes().end})</span>
-                            </div>
-                            {editingTime?.type === 'checkOut' ? (
-                              <div className="flex items-center gap-2 mt-1">
-                                <input
-                                  type="time"
-                                  value={newTime}
-                                  lang="en-GB"
-                                  step="60"
-                                  onFocus={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
-                                  onClick={(e) => { try { (e.currentTarget as any).showPicker(); } catch (err) { } }}
-                                  onChange={e => setNewTime(e.target.value)}
-                                  className="bg-brand-black border border-white/10 rounded-lg px-2 py-1 text-base sm:text-lg font-bold w-28 sm:w-32 outline-none focus:border-brand-gold text-white"
-                                  autoFocus
-                                />
-                                <button
-                                  onClick={() => {
-                                    if (newTime) {
-                                      const { start } = getWorkingTimes();
-                                      const newWh = `${start}-${newTime}`;
-                                      handleCheckIn({ ...user.location }, { workingHours: newWh }); // Simplified rename call logic
-                                      setEditingTime(null);
-                                    }
-                                  }}
-                                  className="p-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition shadow-sm"
-                                >
-                                  <Check className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                                </button>
-                                <button onClick={() => setEditingTime(null)} className="p-2 bg-white/10 text-white rounded-lg hover:bg-white/20 transition shadow-sm border border-white/10"><X className="w-3.5 h-3.5 sm:w-4 sm:h-4" /></button>
-                              </div>
-                            ) : hasReported ? (
-                              <div>
-                                <p className="text-xl sm:text-2xl font-black !text-white keep-white">{formatUzTime(currentReport!.timestamp)}</p>
-                                {earlyDeparture?.isEarly && (
-                                  <div className="mt-1 flex items-center gap-1 text-[8px] sm:text-[9px] font-black text-red-500 bg-red-500/10 px-2 py-0.5 rounded-lg border border-red-500/20 uppercase tracking-tighter">
-                                    <AlertTriangle className="w-3 h-3" />
-                                    <span>{earlyDeparture?.durationStr} erta ketish</span>
-                                  </div>
-                                )}
-                              </div>
-                            ) : (
-                              <p className="text-xl sm:text-2xl font-black !text-white/50 keep-white dark:!text-white/30 truncate">Hali ketmagan</p>
-                            )}
-                          </div>
+                      {!hasReported && (
+                        <div className="p-8 bg-brand-gold rounded-[2.5rem] !text-white keep-white relative overflow-hidden group">
+                          <div className="absolute -right-4 -top-4 w-20 h-20 bg-brand-black/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
+                          <p className="text-[9px] font-black !text-white/80 keep-white uppercase tracking-widest mb-1 relative z-10">{t(language, 'today_total_sales')}</p>
+                          <p className="text-4xl font-black tracking-tight relative z-10 text-white keep-white">{state.sales.filter(s => s.date === today).reduce((acc, s) => acc + s.count + s.bonus, 0).toLocaleString()} <span className="text-xs opacity-60 capitalize text-white keep-white">{t(language, 'pcs')}</span></p>
                         </div>
-                        {checkInForToday && !checkInForToday.checkOutTime && (
-                          <button
-                            onClick={() => {
-                              refreshLocation();
-                              setIsEndDayModalOpen(true);
-                            }}
-                            className="p-2.5 sm:p-3 bg-white text-blue-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10"
-                          >
-                            <LogOut className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-brand-gold" />
-                          </button>
-                        )}
-                        {hasReported && (
-                          <button onClick={() => { setReportText(currentReport?.summary || ''); setReportPhotos(currentReport?.photos || []); setIsEndDayModalOpen(true); }} className="p-2.5 sm:p-3 bg-white text-blue-600 dark:bg-brand-black dark:text-brand-gold rounded-xl shadow-md border border-white/20 dark:border-brand-gold/20 active:scale-90 transition-all hover:bg-white/90 dark:hover:bg-brand-gold/10">
-                            <Edit3 className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      <div className="p-8 bg-brand-gold rounded-[2.5rem] !text-white keep-white relative overflow-hidden group">
-                        <div className="absolute -right-4 -top-4 w-20 h-20 bg-brand-black/10 rounded-full group-hover:scale-150 transition-transform duration-700"></div>
-                        <p className="text-[9px] font-black !text-white/80 keep-white uppercase tracking-widest mb-1 relative z-10">{t(language, 'today_total_sales')}</p>
-                        <p className="text-4xl font-black tracking-tight relative z-10 text-white keep-white">{state.sales.filter(s => s.date === today).reduce((acc, s) => acc + s.count + s.bonus, 0).toLocaleString()} <span className="text-xs opacity-60 capitalize text-white keep-white">{t(language, 'pcs')}</span></p>
-                      </div>
+                      )}
                     </div>
                   </div>
                 </div>

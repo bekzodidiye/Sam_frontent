@@ -1,9 +1,13 @@
 
 import React, { useState, useRef } from 'react';
 import { Role, AppState, User } from '../types';
-import { Phone, Lock, User as UserIcon, Crown, ChevronDown, Globe, Eye, EyeOff, Smartphone, AlertTriangle } from 'lucide-react';
+import { Phone, Lock, User as UserIcon, Crown, ChevronDown, Globe, Eye, EyeOff, Smartphone, AlertTriangle, CheckCircle2 } from 'lucide-react';
 import { t, Language } from '../translations';
 import { authService } from '../api';
+
+import flagUz from '../assets/flag_uz.png';
+import flagRu from '../assets/flag_ru.png';
+import flagEn from '../assets/flag_en.png';
 
 interface AuthProps {
   state: AppState;
@@ -25,6 +29,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
     role: Role.OPERATOR
   });
   const [error, setError] = useState('');
+  const [isSuccess, setIsSuccess] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, boolean>>({});
 
   const formatPhoneNumber = (value: string) => {
@@ -88,11 +93,12 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
     e.preventDefault();
     if (!validateForm()) return;
     setError('');
+    setIsSuccess(false);
 
     try {
       if (isLogin) {
         const loginRes = await authService.login({
-          phone: authForm.nickname, // Backend now accepts nickname in phone field
+          username: authForm.nickname, // This can be nickname or phone, backend handles it
           password: authForm.password
         });
         localStorage.setItem('paynet_auth_token', loginRes.data.access);
@@ -108,11 +114,21 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
           role: authForm.role
         });
         setError("Ro'yxatdan o'tish muvaffaqiyatli! Endi login orqali kiring.");
+        setIsSuccess(true);
         setIsLogin(true);
       }
     } catch (err: any) {
       console.error("Auth error", err);
       setError(err.response?.data?.detail || err.response?.data?.phone?.[0] || t(language, 'auth_error'));
+      setIsSuccess(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>, nextFieldId: string) => {
+    if (e.key === 'Enter' && nextFieldId) {
+      e.preventDefault();
+      const nextField = document.getElementById(nextFieldId);
+      if (nextField) nextField.focus();
     }
   };
 
@@ -126,13 +142,22 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
       <div className="absolute top-6 right-6 z-20">
         <div className="relative group">
           <button className="flex items-center gap-2 px-4 py-2 bg-brand-dark/40 backdrop-blur-md border border-white/10 rounded-xl text-white/60 hover:text-brand-gold transition-all">
-            <Globe className="w-4 h-4" />
+            <img src={language === 'uz' ? flagUz : language === 'ru' ? flagRu : flagEn} alt={language} className="w-3.5 h-3.5 rounded-full object-cover" />
             <span className="text-[10px] font-black uppercase tracking-widest">{t(language, language === 'uz' ? 'uzbek' : language === 'ru' ? 'russian' : 'english')}</span>
           </button>
           <div className="absolute right-0 top-full mt-2 w-32 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-            <button type="button" onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'uzbek')}</button>
-            <button type="button" onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'russian')}</button>
-            <button type="button" onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'english')}</button>
+            <button type="button" onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-3 ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+              <img src={flagUz} alt="UZ" className="w-4 h-4 rounded-full object-cover" />
+              {t(language, 'uzbek')}
+            </button>
+            <button type="button" onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+              <img src={flagRu} alt="RU" className="w-4 h-4 rounded-full object-cover" />
+              {t(language, 'russian')}
+            </button>
+            <button type="button" onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+              <img src={flagEn} alt="EN" className="w-4 h-4 rounded-full object-cover" />
+              {t(language, 'english')}
+            </button>
           </div>
         </div>
       </div>
@@ -150,8 +175,8 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
 
         <form onSubmit={handleAuth} className="space-y-5">
           {error && (
-            <div className="bg-red-500/10 text-red-500 p-4 rounded-2xl text-xs font-bold border border-red-500/20 flex items-center gap-3">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
+            <div className={`${isSuccess ? 'bg-green-500/10 text-green-500 border-green-500/20' : 'bg-red-500/10 text-red-500 border-red-500/20'} p-4 rounded-2xl text-xs font-bold border flex items-center gap-3`}>
+              {isSuccess ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
               {error}
             </div>
           )}
@@ -161,11 +186,13 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
               <div className="grid grid-cols-2 gap-4">
                 <div className="relative">
                   <input
+                    id="firstName"
                     type="text"
                     required
                     className={`peer w-full px-5 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder-transparent focus:outline-none transition-all ${fieldErrors.firstName ? 'border-red-500' : 'border-white/10 focus:border-brand-gold'}`}
                     value={authForm.firstName}
                     placeholder="Ism"
+                    onKeyDown={(e) => handleKeyDown(e, 'lastName')}
                     onChange={e => {
                         const val = e.target.value;
                         const formatted = val ? val.charAt(0).toUpperCase() + val.slice(1).toLowerCase() : '';
@@ -176,11 +203,13 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
                 </div>
                 <div className="relative">
                   <input
+                    id="lastName"
                     type="text"
                     required
                     className={`peer w-full px-5 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder-transparent focus:outline-none transition-all ${fieldErrors.lastName ? 'border-red-500' : 'border-white/10 focus:border-brand-gold'}`}
                     value={authForm.lastName}
                     placeholder="Familiya"
+                    onKeyDown={(e) => handleKeyDown(e, 'nickname')}
                     onChange={e => {
                         const val = e.target.value;
                         const formatted = val ? val.charAt(0).toUpperCase() + val.slice(1).toLowerCase() : '';
@@ -195,11 +224,13 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
             <div className="relative group">
               <UserIcon className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-brand-gold w-5 h-5 transition-colors" />
               <input
+                id="nickname"
                 type="text"
                 placeholder={isLogin ? t(language, 'login_nickname_label') : t(language, 'nickname')}
                 required
                 className={`w-full pl-12 pr-4 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder:text-white/20 focus:outline-none transition-all ${fieldErrors.nickname ? 'border-red-500 bg-red-500/5' : 'border-white/10 focus:border-brand-gold'}`}
                 value={authForm.nickname}
+                onKeyDown={(e) => handleKeyDown(e, isLogin ? 'password' : 'phone')}
                 onChange={e => setAuthForm({ ...authForm, nickname: e.target.value })}
               />
             </div>
@@ -210,11 +241,13 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
                     <Smartphone className="text-white/20 group-focus-within:text-brand-gold w-5 h-5" />
                 </div>
                 <input
+                  id="phone"
                   type="tel"
                   placeholder={t(language, 'phone_number')}
                   required
                   className={`w-full pl-12 pr-4 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder:text-white/20 focus:outline-none transition-all ${fieldErrors.phone ? 'border-red-500 bg-red-500/5' : 'border-white/10 focus:border-brand-gold'}`}
                   value={authForm.phone}
+                  onKeyDown={(e) => handleKeyDown(e, 'password')}
                   onChange={e => setAuthForm({ ...authForm, phone: formatPhoneNumber(e.target.value) })}
                 />
                 <label className="absolute left-10 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest">Telefon raqam</label>
@@ -224,6 +257,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
             <div className="relative group">
               <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-white/20 group-focus-within:text-brand-gold w-5 h-5 transition-colors" />
               <input
+                id="password"
                 type={showPassword ? "text" : "password"}
                 placeholder={t(language, 'password')}
                 required
@@ -240,20 +274,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
               </button>
             </div>
 
-            {!isLogin && (
-              <div className="space-y-2">
-                <label className="text-[10px] font-black text-white/20 uppercase tracking-widest block mb-1 ml-1">{t(language, 'role_label')}</label>
-                <div className="relative">
-                  <button
-                    type="button"
-                    className="w-full px-5 py-4 bg-white/5 border border-white/10 rounded-2xl text-sm font-black text-white/40 text-left flex items-center justify-between cursor-not-allowed"
-                  >
-                    <span>{t(language, 'operator')}</span>
-                  </button>
-                  <p className="text-[9px] font-bold text-white/20 pl-2 mt-1 italic">Hozirda faqat operator sifatida ro'yxatdan o'tish mumkin</p>
-                </div>
-              </div>
-            )}
+            <div />
           </div>
 
           <button
@@ -270,7 +291,16 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
             onClick={() => {
               setIsLogin(!isLogin);
               setError('');
+              setIsSuccess(false);
               setFieldErrors({});
+              setAuthForm({
+                firstName: '',
+                lastName: '',
+                nickname: '',
+                phone: '+998',
+                password: '',
+                role: Role.OPERATOR
+              });
             }}
             className="text-white/40 hover:text-brand-gold text-xs font-bold transition-colors uppercase tracking-widest"
           >

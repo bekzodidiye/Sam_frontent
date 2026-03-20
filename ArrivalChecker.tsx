@@ -3,7 +3,6 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import Auth from './components/Auth';
 import ManagerPanel from './components/ManagerPanel';
 import OperatorPanel from './components/OperatorPanel';
-import Calculator from './components/Calculator';
 import RulesPanel from './components/RulesPanel';
 import RulesView from './components/RulesView';
 import { AppState, Role, User, CheckIn, SimSale, DailyReport, Message, MonthlyTarget } from './types';
@@ -14,6 +13,11 @@ import { t, Language } from './translations';
 import { authService, userService, checkInService, saleService, messageService, ruleService, targetService, reportService, linkService, settingsService, operatorRatingService } from './api';
 import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useWebSocket } from './hooks/useWebSocket';
+import { AlertTriangle, CheckCircle2 } from 'lucide-react';
+
+import flagUz from './assets/flag_uz.png';
+import flagRu from './assets/flag_ru.png';
+import flagEn from './assets/flag_en.png';
 
 // Events that trigger a background data refresh
 const RT_EVENTS = [
@@ -49,6 +53,12 @@ const ArrivalChecker: React.FC = () => {
   });
 
   const [isLoading, setIsLoading] = useState(true);
+  const [notification, setNotification] = useState<{message: string, type: 'error' | 'success'} | null>(null);
+
+  const showNotification = useCallback((message: string, type: 'error' | 'success' = 'error') => {
+    setNotification({ message, type });
+    setTimeout(() => setNotification(null), 5000);
+  }, []);
 
   const fetchData = async () => {
     const token = localStorage.getItem('paynet_auth_token');
@@ -124,7 +134,6 @@ const ArrivalChecker: React.FC = () => {
     const saved = localStorage.getItem('paynet_app_dark_mode');
     return saved === null ? true : saved === 'true';
   });
-  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [isAchievementModalOpen, setIsAchievementModalOpen] = useState(false);
   const [achievementMonthInput, setAchievementMonthInput] = useState("");
 
@@ -139,20 +148,26 @@ const ArrivalChecker: React.FC = () => {
     return (saved as Language) || 'uz';
   });
 
-  const [unreadBadges, setUnreadBadges] = useState({
-    rules: 0,
-    sales_panel: 0,
-    simcards: 0,
+  const [unreadBadges, setUnreadBadges] = useState(() => {
+    const saved = localStorage.getItem('unread_badges');
+    return saved ? JSON.parse(saved) : { rules: 0, sales_panel: 0, simcards: 0, approvals: 0 };
   });
 
   const [isLogoutModalOpen, setIsLogoutModalOpen] = useState(false);
 
-  const prevLengths = useRef({
-    rules: -1,
-    salesLinks: -1,
-    approvals: -1,
-    userInventory: -1
-  });
+  // Persistence for counts to avoid badge on reload
+  const seenCounts = useRef(
+    (() => {
+      const saved = localStorage.getItem('seen_counts');
+      return saved ? JSON.parse(saved) : { rules: -1, salesLinks: -1, approvals: -1, userInventory: -1 };
+    })()
+  );
+
+
+  useEffect(() => {
+    localStorage.setItem('unread_badges', JSON.stringify(unreadBadges));
+    localStorage.setItem('seen_counts', JSON.stringify(seenCounts.current));
+  }, [unreadBadges]);
 
   const getTotalInventoryCount = useCallback(() => {
     if (!state.currentUser?.inventory) return 0;
@@ -166,36 +181,77 @@ const ArrivalChecker: React.FC = () => {
     let hasChanges = false;
     let newBadges = { ...unreadBadges };
 
+    // RULES
     const currentRulesCount = state.rules.length;
-    if (prevLengths.current.rules !== -1 && currentRulesCount > prevLengths.current.rules) {
-      if (!location.pathname.includes('/rules')) { newBadges.rules = 1; hasChanges = true; }
-      shouldPlaySound = true;
+    if (seenCounts.current.rules !== -1 && currentRulesCount > seenCounts.current.rules) {
+      if (!location.pathname.includes('/rules')) { 
+        newBadges.rules = (newBadges.rules || 0) + (currentRulesCount - seenCounts.current.rules); 
+        hasChanges = true; 
+        shouldPlaySound = true;
+        seenCounts.current.rules = currentRulesCount;
+      }
     }
-    prevLengths.current.rules = currentRulesCount;
+    if (location.pathname.includes('/rules')) {
+      if (seenCounts.current.rules !== currentRulesCount) { seenCounts.current.rules = currentRulesCount; hasChanges = true; }
+      if (newBadges.rules !== 0) { newBadges.rules = 0; hasChanges = true; }
+    } else if (seenCounts.current.rules === -1) {
+      seenCounts.current.rules = currentRulesCount;
+    }
 
+    // SALES LINKS
     const currentSalesLinksCount = state.salesLinks.length;
-    if (prevLengths.current.salesLinks !== -1 && currentSalesLinksCount > prevLengths.current.salesLinks) {
-      if (!location.pathname.includes('/sales')) { newBadges.sales_panel = 1; hasChanges = true; }
-      shouldPlaySound = true;
+    if (seenCounts.current.salesLinks !== -1 && currentSalesLinksCount > seenCounts.current.salesLinks) {
+      if (!location.pathname.includes('/sales')) { 
+        newBadges.sales_panel = (newBadges.sales_panel || 0) + (currentSalesLinksCount - seenCounts.current.salesLinks); 
+        hasChanges = true; 
+        shouldPlaySound = true;
+        seenCounts.current.salesLinks = currentSalesLinksCount;
+      }
     }
-    prevLengths.current.salesLinks = currentSalesLinksCount;
-
-    const currentPending = state.users.filter(u => !u.isApproved).length;
-    if (prevLengths.current.approvals !== -1 && currentPending > prevLengths.current.approvals) {
-      shouldPlaySound = true;
+    if (location.pathname.includes('/sales')) {
+      if (seenCounts.current.salesLinks !== currentSalesLinksCount) { seenCounts.current.salesLinks = currentSalesLinksCount; hasChanges = true; }
+      if (newBadges.sales_panel !== 0) { newBadges.sales_panel = 0; hasChanges = true; }
+    } else if (seenCounts.current.salesLinks === -1) {
+      seenCounts.current.salesLinks = currentSalesLinksCount;
     }
-    prevLengths.current.approvals = currentPending;
 
+    // APPROVALS
+    if (state.currentUser.role === Role.MANAGER) {
+      const currentPending = state.users.filter(u => !u.isApproved).length;
+      if (seenCounts.current.approvals !== -1 && currentPending > seenCounts.current.approvals) {
+        if (!location.pathname.includes('/approvals')) { 
+          newBadges.approvals = (newBadges.approvals || 0) + (currentPending - seenCounts.current.approvals); 
+          hasChanges = true; 
+          shouldPlaySound = true;
+          // Mark these as "seen" so we don't notify again until count INCREASES further
+          seenCounts.current.approvals = currentPending;
+        }
+      }
+      if (location.pathname.includes('/approvals')) {
+        if (seenCounts.current.approvals !== currentPending) { seenCounts.current.approvals = currentPending; hasChanges = true; }
+        if (newBadges.approvals !== 0) { newBadges.approvals = 0; hasChanges = true; }
+      } else if (seenCounts.current.approvals === -1) {
+        seenCounts.current.approvals = currentPending;
+      }
+    }
+
+    // INVENTORY
     const currentInvCount = getTotalInventoryCount();
-    if (prevLengths.current.userInventory !== -1 && currentInvCount > prevLengths.current.userInventory) {
-      if (!location.pathname.includes('/inventory')) { newBadges.simcards = 1; hasChanges = true; }
-      shouldPlaySound = true;
+    if (seenCounts.current.userInventory !== -1 && currentInvCount > seenCounts.current.userInventory) {
+      if (!location.pathname.includes('/inventory')) { 
+        newBadges.simcards = (newBadges.simcards || 0) + 1; 
+        hasChanges = true; 
+        shouldPlaySound = true;
+        seenCounts.current.userInventory = currentInvCount;
+      }
     }
-    prevLengths.current.userInventory = currentInvCount;
+    if (location.pathname.includes('/inventory')) {
+      if (seenCounts.current.userInventory !== currentInvCount) { seenCounts.current.userInventory = currentInvCount; hasChanges = true; }
+      if (newBadges.simcards !== 0) { newBadges.simcards = 0; hasChanges = true; }
+    } else if (seenCounts.current.userInventory === -1) {
+      seenCounts.current.userInventory = currentInvCount;
+    }
 
-    if (location.pathname.includes('/rules') && newBadges.rules !== 0) { newBadges.rules = 0; hasChanges = true; }
-    if (location.pathname.includes('/sales') && newBadges.sales_panel !== 0) { newBadges.sales_panel = 0; hasChanges = true; }
-    if (location.pathname.includes('/inventory') && newBadges.simcards !== 0) { newBadges.simcards = 0; hasChanges = true; }
 
     if (shouldPlaySound) {
       const audio = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
@@ -204,8 +260,10 @@ const ArrivalChecker: React.FC = () => {
 
     if (hasChanges) {
       setUnreadBadges(newBadges);
+      localStorage.setItem('seen_counts', JSON.stringify(seenCounts.current));
     }
   }, [state.rules.length, state.salesLinks.length, state.users, getTotalInventoryCount, location.pathname, isLoading, state.currentUser, unreadBadges]);
+
 
   const unreadMessagesCount = useMemo(() => {
     if (!state.currentUser) return 0;
@@ -589,14 +647,7 @@ const ArrivalChecker: React.FC = () => {
                 </div>
 
                 <div className="flex items-center gap-2">
-                  {state.currentUser.role === Role.MANAGER && (
-                    <button
-                      onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
-                      className="p-2 text-white/40 hover:text-brand-gold transition-colors"
-                    >
-                      <Hash className="w-5 h-5" />
-                    </button>
-                  )}
+
                   <button
                     onClick={() => setIsMobileMenuOpen(true)}
                     className="p-2 text-white/40 hover:text-brand-gold transition-colors"
@@ -649,13 +700,22 @@ const ArrivalChecker: React.FC = () => {
                           <div className="w-px h-4 bg-white/10"></div>
                           <div className="relative group flex-1">
                             <button className="w-full flex justify-center items-center gap-1.5 p-2 text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5">
-                              <Globe className="w-4 h-4" />
-                              <span className="text-[10px] font-black uppercase tracking-widest">{language}</span>
+                              <img src={language === 'uz' ? flagUz : language === 'ru' ? flagRu : flagEn} alt={language} className="w-3.5 h-3.5 rounded-full object-cover" />
+                              <span className="text-[10px] font-black uppercase tracking-widest">{t(language, language === 'uz' ? 'uzbek' : language === 'ru' ? 'russian' : 'english')}</span>
                             </button>
                             <div className="absolute top-full left-0 mt-2 w-48 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                              <button onClick={() => { setLanguage('uz'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'uzbek')}</button>
-                              <button onClick={() => { setLanguage('ru'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'russian')}</button>
-                              <button onClick={() => { setLanguage('en'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'english')}</button>
+                              <button onClick={() => { setLanguage('uz'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-3 ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+                                <img src={flagUz} alt="UZ" className="w-5 h-5 rounded-full object-cover" />
+                                {t(language, 'uzbek')}
+                              </button>
+                              <button onClick={() => { setLanguage('ru'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+                                <img src={flagRu} alt="RU" className="w-5 h-5 rounded-full object-cover" />
+                                {t(language, 'russian')}
+                              </button>
+                              <button onClick={() => { setLanguage('en'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+                                <img src={flagEn} alt="EN" className="w-5 h-5 rounded-full object-cover" />
+                                {t(language, 'english')}
+                              </button>
                             </div>
                           </div>
                         </div>
@@ -673,7 +733,7 @@ const ArrivalChecker: React.FC = () => {
                             { id: 'messages', path: '/manager/messages', label: t(language, 'messages'), icon: '💬', count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
                             { id: 'sales_panel', path: '/manager/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
                             { id: 'rules', path: '/manager/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
-                            { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: state.users.filter(u => !u.isApproved).length > 0 ? state.users.filter(u => !u.isApproved).length : undefined }
+                            { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: unreadBadges.approvals > 0 ? unreadBadges.approvals : undefined }
                           ].map(tab => (
                             <button
                               key={tab.id}
@@ -781,18 +841,7 @@ const ArrivalChecker: React.FC = () => {
                 {!isSidebarCollapsed && (
                   <div className="p-4 border-b border-white/10 animate-in fade-in slide-in-from-left-4 duration-500">
                     <div className="flex items-center justify-between bg-white/5 p-1.5 rounded-xl border border-white/10">
-                      {state.currentUser.role === Role.MANAGER && (
-                        <>
-                          <button
-                            onClick={() => setIsCalculatorOpen(!isCalculatorOpen)}
-                            className={`flex-1 p-2 flex justify-center transition-all rounded-lg ${isCalculatorOpen ? 'text-brand-gold bg-brand-gold/10 border border-brand-gold/30 shadow-lg shadow-brand-gold/10' : 'text-white/40 hover:text-brand-gold hover:bg-white/5 border border-transparent'}`}
-                            title={t(language, 'calculator')}
-                          >
-                            <Hash className="w-4 h-4" />
-                          </button>
-                          <div className="w-px h-4 bg-white/10"></div>
-                        </>
-                      )}
+
                       <button
                         onClick={() => setIsDarkMode(!isDarkMode)}
                         className="flex-1 p-2 flex justify-center text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5"
@@ -803,13 +852,22 @@ const ArrivalChecker: React.FC = () => {
                       <div className="w-px h-4 bg-white/10"></div>
                       <div className="relative group flex-1">
                         <button className="w-full flex justify-center items-center gap-1.5 p-2 text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5">
-                          <Globe className="w-4 h-4" />
-                          <span className="text-[10px] font-black uppercase tracking-widest">{language}</span>
+                          <img src={language === 'uz' ? flagUz : language === 'ru' ? flagRu : flagEn} alt={language} className="w-3.5 h-3.5 rounded-full object-cover" />
+                          <span className="text-[10px] font-black uppercase tracking-widest">{t(language, language === 'uz' ? 'uzbek' : language === 'ru' ? 'russian' : 'english')}</span>
                         </button>
                         <div className="absolute top-full left-0 mt-2 w-48 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                          <button onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'uzbek')}</button>
-                          <button onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'russian')}</button>
-                          <button onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>{t(language, 'english')}</button>
+                          <button onClick={() => setLanguage('uz')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-3 ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+                            <img src={flagUz} alt="UZ" className="w-5 h-5 rounded-full object-cover" />
+                            {t(language, 'uzbek')}
+                          </button>
+                          <button onClick={() => setLanguage('ru')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+                            <img src={flagRu} alt="RU" className="w-5 h-5 rounded-full object-cover" />
+                            {t(language, 'russian')}
+                          </button>
+                          <button onClick={() => setLanguage('en')} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
+                            <img src={flagEn} alt="EN" className="w-5 h-5 rounded-full object-cover" />
+                            {t(language, 'english')}
+                          </button>
                         </div>
                       </div>
                     </div>
@@ -828,7 +886,7 @@ const ArrivalChecker: React.FC = () => {
                       { id: 'messages', path: '/manager/messages', label: t(language, 'messages'), icon: '💬', count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
                       { id: 'sales_panel', path: '/manager/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
                       { id: 'rules', path: '/manager/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
-                      { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: state.users.filter(u => !u.isApproved).length > 0 ? state.users.filter(u => !u.isApproved).length : undefined },
+                      { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: unreadBadges.approvals > 0 ? unreadBadges.approvals : undefined },
                       { id: 'settings', path: '/manager/settings', label: t(language, 'settings'), icon: '⚙️' }
                     ].map(tab => (
                       <button
@@ -963,7 +1021,8 @@ const ArrivalChecker: React.FC = () => {
                     removeTariff: (company: string, tariff: string) => setState(prev => ({ ...prev, tariffs: { ...prev.tariffs, [company]: (prev.tariffs?.[company] || []).filter(t => t !== tariff) } })),
                     addSalesLink: (link: any) => setState(prev => ({ ...prev, salesLinks: [...prev.salesLinks, { ...link, id: Date.now().toString(), createdAt: new Date().toISOString() }] })),
                     removeSalesLink: (linkId: string) => setState(prev => ({ ...prev, salesLinks: prev.salesLinks.filter(l => l.id !== linkId) })),
-                    updateSalesLink: (linkId: string, updates: any) => setState(prev => ({ ...prev, salesLinks: prev.salesLinks.map(l => l.id === linkId ? { ...l, ...updates } : l) }))
+                    updateSalesLink: (linkId: string, updates: any) => setState(prev => ({ ...prev, salesLinks: prev.salesLinks.map(l => l.id === linkId ? { ...l, ...updates } : l) })),
+                    showNotification
                   };
 
                   const operatorProps = {
@@ -1050,7 +1109,8 @@ const ArrivalChecker: React.FC = () => {
                     markMessageAsRead: (msgId: string) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) })),
                     refreshData: fetchData,
                     isDarkMode,
-                    language
+                    language,
+                    showNotification
                   };
 
                   return (
@@ -1066,7 +1126,7 @@ const ArrivalChecker: React.FC = () => {
                           <Route path="/manager/inventory" element={<ManagerPanel {...managerProps} activeTab="simcards" />} />
                           <Route path="/manager/messages" element={<ManagerPanel {...managerProps} activeTab="messages" />} />
                           <Route path="/manager/sales" element={<ManagerPanel {...managerProps} activeTab="sales_panel" />} />
-                          <Route path="/manager/rules" element={<><ManagerPanel {...managerProps} activeTab="rules" /><RulesPanel state={state} setState={setState} language={language} /></>} />
+                          <Route path="/manager/rules" element={<><ManagerPanel {...managerProps} activeTab="rules" /><RulesPanel state={state} setState={setState} language={language} showNotification={showNotification} /></>} />
                           <Route path="/manager/approvals" element={<ManagerPanel {...managerProps} activeTab="approvals" />} />
                           <Route path="/manager/settings" element={<ManagerPanel {...managerProps} activeTab="settings" />} />
                         </>
@@ -1089,9 +1149,18 @@ const ArrivalChecker: React.FC = () => {
               </main>
 
               <AnimatePresence>
-                {isCalculatorOpen && (
-                  <Calculator onClose={() => setIsCalculatorOpen(false)} language={language} isDarkMode={isDarkMode} />
+                {notification && (
+                  <motion.div
+                    initial={{ opacity: 0, y: -20, x: '-50%' }}
+                    animate={{ opacity: 1, y: 0, x: '-50%' }}
+                    exit={{ opacity: 0, y: -20, x: '-50%' }}
+                    className={`fixed top-4 left-1/2 z-[200] px-6 py-4 rounded-2xl border font-bold text-sm tracking-wide shadow-2xl flex items-center gap-3 backdrop-blur-xl ${notification.type === 'error' ? 'bg-red-500/10 text-red-500 border-red-500/20' : 'bg-green-500/10 text-green-500 border-green-500/20'}`}
+                  >
+                    {notification.type === 'error' ? <AlertTriangle className="w-5 h-5 shrink-0" /> : <CheckCircle2 className="w-5 h-5 shrink-0" />}
+                    {notification.message}
+                  </motion.div>
                 )}
+
 
                 {isAchievementModalOpen && (
                   <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-brand-black/80 backdrop-blur-sm">

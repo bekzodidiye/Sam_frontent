@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8003/api/v1/';
+const API_URL = import.meta.env.VITE_API_URL || 'http://127.0.0.1:8003/api/v1/';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -57,6 +57,7 @@ export const userService = {
 
     return api.patch(`users/${id}/`, payload);
   },
+  deleteUser: (id: string) => api.delete(`users/${id}/`),
 };
 
 export const checkInService = {
