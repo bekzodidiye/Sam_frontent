@@ -2810,28 +2810,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="w-full">
 
-              {/* Header */}
-              <div className="mb-6 flex items-center justify-between">
-                <div></div>
-                {checkInForToday && !checkInForToday.checkOutTime && !hasReported && (
-                  <button
-                    onClick={() => {
-                      refreshLocation();
-                      setIsEndDayModalOpen(true);
-                    }}
-                    className="px-6 py-3 gold-gradient text-brand-black rounded-xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2"
-                  >
-                    <LogOutIcon className="w-4 h-4" />
-                    Ishni yakunlash (Finish)
-                  </button>
-                )}
-                {hasReported && (
-                   <div className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-xl">
-                      <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
-                      <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Ish yakunlandi</span>
-                   </div>
-                )}
-              </div>
+              {hasReported && (
+                 <div className="mb-6 flex items-center justify-end">
+                    <div className="flex items-center gap-3 px-6 py-3 bg-white/5 border border-white/10 rounded-xl">
+                       <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_10px_rgba(34,197,94,0.5)]" />
+                       <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">Ish yakunlandi</span>
+                    </div>
+                 </div>
+              )}
 
               <div className="mb-6">
                 <div className="w-full">

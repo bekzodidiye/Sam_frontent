@@ -139,6 +139,8 @@ export const translations = {
     update_rating: 'Bahoni yangilash',
     previous_rating: 'Avval qo\'yilgan baho',
     rating_comment_placeholder: 'Izoh qoldiring...',
+    update_success: 'Ma\'lumotlar muvaffaqiyatli saqlandi',
+    update_error: 'Xatolik yuz berdi',
   },
   ru: {
     overview: 'ОБЗОР',
@@ -280,6 +282,8 @@ export const translations = {
     update_rating: 'Обновить оценку',
     previous_rating: 'Предыдущая оценка',
     rating_comment_placeholder: 'Оставьте комментарий...',
+    update_success: 'Данные успешно сохранены',
+    update_error: 'Произошла ошибка',
   },
   en: {
     overview: 'OVERVIEW',
@@ -421,6 +425,8 @@ export const translations = {
     update_rating: 'Update Rating',
     previous_rating: 'Previous Rating',
     rating_comment_placeholder: 'Leave a comment...',
+    update_success: 'Data saved successfully',
+    update_error: 'An error occurred',
   }
 };
 

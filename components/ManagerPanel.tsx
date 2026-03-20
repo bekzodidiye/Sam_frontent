@@ -614,6 +614,14 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     'Uztelecom': '0'
   });
 
+  const [giveSimModalUser, setGiveSimModalUser] = useState<User | null>(null);
+  const [giveSimForm, setGiveSimForm] = useState<Record<string, string>>({
+    'Ucell': '0',
+    'Mobiuz': '0',
+    'Beeline': '0',
+    'Uztelecom': '0'
+  });
+
   const [isSalesLinkModalOpen, setIsSalesLinkModalOpen] = useState(false);
   const [isSalesLinkSubmitting, setIsSalesLinkSubmitting] = useState(false);
   const [editingSalesLinkId, setEditingSalesLinkId] = useState<string | null>(null);
@@ -666,9 +674,35 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   const handleUpdateUser = async (userId: string, updates: any) => {
     try {
       await userService.updateUser(userId, updates);
-      // Removed reload
+      showNotification(t(language, 'update_success'), 'success');
     } catch (err) {
       console.error("Failed to update user", err);
+      showNotification(t(language, 'update_error'), 'error');
+    }
+  };
+
+  const handleGiveSims = async (userId: string, addedCounts: Record<string, number>) => {
+    const user = state.users.find(u => u.id === userId);
+    if (!user) return;
+    
+    const currentInventory = { ...(user.inventory || {}) };
+    let hasAdded = false;
+    Object.keys(addedCounts).forEach(company => {
+      if (addedCounts[company] > 0) {
+        const current = Number(currentInventory[company]) || 0;
+        currentInventory[company] = current + addedCounts[company];
+        hasAdded = true;
+      }
+    });
+    
+    if (!hasAdded) return;
+
+    try {
+      await userService.updateUser(userId, { inventory: currentInventory });
+      showNotification("Simkartalar muvaffaqiyatli berildi", 'success');
+    } catch (err) {
+      console.error("Failed to give sims", err);
+      showNotification("Xatolik yuz berdi", 'error');
     }
   };
 
@@ -3424,6 +3458,66 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               </div>
             )}
 
+            {giveSimModalUser && (
+              <div className="fixed inset-0 bg-gray-900/60 backdrop-blur-md z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
+                <div className="bg-brand-dark w-full max-w-lg rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
+                  <div className="p-8 border-b border-white/5 flex items-center justify-between bg-brand-black">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-brand-gold text-brand-black rounded-2xl shadow-lg">
+                        <Plus className="w-5 h-5 font-black" />
+                      </div>
+                      <div>
+                        <h3 className="text-xl font-black text-white tracking-tight uppercase">Simkarta berish</h3>
+                        <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">{giveSimModalUser.nickname || giveSimModalUser.phone}</p>
+                      </div>
+                    </div>
+                    <button onClick={() => setGiveSimModalUser(null)} className="p-2 bg-brand-black rounded-xl text-white/40 hover:text-white transition shadow-sm border border-white/10">
+                      <X className="w-5 h-5" />
+                    </button>
+                  </div>
+
+                  <div className="p-8 space-y-6">
+                    <div className="grid grid-cols-2 gap-4">
+                      {['Ucell', 'Mobiuz', 'Beeline', 'Uztelecom'].map(company => (
+                        <div key={company} className="space-y-2">
+                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">{company}</label>
+                          <input
+                            type="text"
+                            inputMode="numeric"
+                            className="w-full bg-brand-black border border-white/10 rounded-2xl p-4 text-white font-black text-center focus:border-brand-gold outline-none transition-all"
+                            placeholder="0"
+                            value={giveSimForm[company]}
+                            onChange={e => {
+                              const val = e.target.value;
+                              if (val === '' || (/^\d+$/.test(val) && val.length <= 6)) {
+                                setGiveSimForm({ ...giveSimForm, [company]: val });
+                              }
+                            }}
+                          />
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="pt-4 flex gap-4">
+                      <button
+                        onClick={() => {
+                          const added: Record<string, number> = {};
+                          Object.keys(giveSimForm).forEach(k => {
+                            added[k] = parseInt(giveSimForm[k]) || 0;
+                          });
+                          handleGiveSims(giveSimModalUser.id, added);
+                          setGiveSimModalUser(null);
+                        }}
+                        className="flex-1 py-5 bg-brand-gold text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all"
+                      >
+                        Tasdiqlash
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {inventoryModalUser && (
               <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-in fade-in duration-300">
                 <div className="bg-brand-black rounded-[2rem] sm:rounded-[2.5rem] p-6 sm:p-8 max-w-2xl w-full shadow-2xl border border-white/10 animate-in zoom-in-95 duration-300">
@@ -3557,24 +3651,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 return (
                   <div
                     key={user.id}
-                    onClick={() => {
-                      setInventoryModalUser(user);
-                      setInventoryForm({
-                        'Ucell': counts['Ucell'] || 0,
-                        'Mobiuz': counts['Mobiuz'] || 0,
-                        'Beeline': counts['Beeline'] || 0,
-                        'Uztelecom': counts['Uztelecom'] || 0
-                      });
-                    }}
-                    className="bg-brand-black p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 shadow-sm hover:border-brand-gold/30 transition-all cursor-pointer group active:scale-95"
+                    className="bg-brand-black p-5 sm:p-6 rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 shadow-sm hover:border-brand-gold/30 transition-all group active:scale-[0.98] flex flex-col"
                   >
                     <div className="flex items-center justify-between mb-6 gap-4">
                       <div className="flex items-center gap-3 sm:gap-4 flex-1 min-w-0">
-                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white/5 flex items-center justify-center font-black text-white overflow-hidden text-lg sm:text-xl shadow-inner shrink-0">
+                        <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-xl sm:rounded-2xl bg-white/5 flex items-center justify-center font-black text-white overflow-hidden text-lg sm:text-xl shadow-inner shrink-0 border border-white/5">
                           {user.photo ? (
-                            <img src={user.photo} alt={user.firstName} className="w-full h-full object-cover" />
+                            <img src={getMediaUrl(user.photo)} alt={user.firstName} className="w-full h-full object-cover" />
                           ) : (
-                            <>{user.firstName?.[0]}{user.lastName?.[0]}</>
+                            <div className="w-full h-full flex items-center justify-center bg-brand-gold/10 text-brand-gold uppercase">{user.firstName?.[0]}{user.lastName?.[0]}</div>
                           )}
                         </div>
                         <div className="min-w-0">
@@ -3582,23 +3667,52 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           <p className="text-[9px] sm:text-[10px] font-bold text-white/30 uppercase tracking-widest">{t(language, 'operator')}</p>
                         </div>
                       </div>
-                      <div className="text-right bg-brand-gold/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-brand-gold/20 group-hover:bg-brand-gold group-hover:text-brand-black transition-colors shrink-0">
-                        <p className="text-xl sm:text-2xl font-black text-brand-gold group-hover:text-brand-black">{formatLargeNumber(totalSims)}</p>
-                        <p className="text-[7px] sm:text-[8px] font-black text-brand-gold/70 uppercase tracking-widest group-hover:text-brand-black/70">{t(language, 'total')}</p>
+                      <div className="text-right bg-brand-gold/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl sm:rounded-2xl border border-brand-gold/20 shrink-0">
+                        <p className="text-xl sm:text-2xl font-black text-brand-gold">{formatLargeNumber(totalSims)}</p>
+                        <p className="text-[7px] sm:text-[8px] font-black text-brand-gold/70 uppercase tracking-widest">{t(language, 'total')}</p>
                       </div>
                     </div>
-                    <div className="grid grid-cols-2 gap-2 sm:gap-3">
+                    <div className="grid grid-cols-2 gap-2 sm:gap-3 mb-6">
                       {[
                         { name: 'Ucell', color: 'text-[#9b51e0]', bg: 'bg-[#9b51e0]/10', border: 'border-[#9b51e0]/20' },
                         { name: 'Uztelecom', color: 'text-[#009ee0]', bg: 'bg-[#009ee0]/10', border: 'border-[#009ee0]/20' },
                         { name: 'Mobiuz', color: 'text-[#eb1c24]', bg: 'bg-[#eb1c24]/10', border: 'border-[#eb1c24]/20' },
                         { name: 'Beeline', color: 'text-[#fdb913]', bg: 'bg-[#fdb913]/10', border: 'border-[#fdb913]/20' }
                       ].map(provider => (
-                        <div key={provider.name} className={`p-4 rounded-2xl ${provider.bg} border ${provider.border}`}>
+                        <div key={provider.name} className={`p-4 rounded-2xl ${provider.bg} border ${provider.border} group/item hover:scale-105 transition-transform`}>
                           <p className="text-[9px] font-black text-white/50 uppercase tracking-widest mb-2">{provider.name}</p>
                           <p className={`text-2xl font-black ${provider.color}`}>{formatLargeNumber(counts[provider.name as keyof typeof counts])} <span className="text-[10px] text-white/30 font-bold">dona</span></p>
                         </div>
                       ))}
+                    </div>
+                    <div className="mt-auto flex gap-3">
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setGiveSimModalUser(user);
+                          setGiveSimForm({ 'Ucell': '0', 'Mobiuz': '0', 'Beeline': '0', 'Uztelecom': '0' });
+                        }}
+                        className="flex-1 py-4 bg-brand-gold text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        Simkarta berish
+                      </button>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setInventoryModalUser(user);
+                          setInventoryForm({
+                            'Ucell': counts['Ucell'] || 0,
+                            'Mobiuz': counts['Mobiuz'] || 0,
+                            'Beeline': counts['Beeline'] || 0,
+                            'Uztelecom': counts['Uztelecom'] || 0
+                          });
+                        }}
+                        className="p-4 bg-white/5 text-white/40 hover:text-white hover:bg-white/10 rounded-2xl border border-white/10 transition-all"
+                        title="Inventarni tahrirlash"
+                      >
+                        <Edit className="w-4 h-4" />
+                      </button>
                     </div>
                   </div>
                 );
