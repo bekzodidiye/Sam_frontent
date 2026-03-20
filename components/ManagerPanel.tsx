@@ -133,7 +133,7 @@ const RefinedStatCard = ({ label, value, icon, color, onClick, isActive }: any) 
     className={`bg-brand-dark p-5 rounded-2xl border-2 transition-all ${onClick ? 'cursor-pointer active:scale-95' : ''} ${isActive ? 'ring-4 ring-brand-gold/10 border-brand-gold shadow-xl' : 'border-white/10 shadow-sm hover:border-brand-gold/30'}`}
   >
     <div className="flex items-center gap-4">
-      <div className={`${color} text-white p-3 rounded-xl shadow-md`}>{React.cloneElement(icon, { className: 'w-5 h-5' })}</div>
+      <div className={`${color} text-white keep-white p-3 rounded-xl shadow-md`}>{React.cloneElement(icon, { className: 'w-5 h-5 keep-white' })}</div>
       <div className="flex-1 min-w-0">
         <p className={`text-[8px] font-black uppercase tracking-widest mb-0.5 truncate ${isActive ? 'text-brand-gold' : 'text-white/40'}`}>{label}</p>
         <p className="text-lg font-black text-white truncate w-full">
@@ -200,7 +200,7 @@ const SingleLocationMap: React.FC<{
 
       const tileUrl = isDarkMode
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
 
       L.tileLayer(tileUrl, { maxZoom: 20 }).addTo(leafletMap.current);
       L.control.zoom({ position: 'bottomright' }).addTo(leafletMap.current);
@@ -1974,7 +1974,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   label={t(language, 'today_sales')}
                   value={getUserSalesCount(selectedUser.id, 'today')}
                   icon={<Clock />}
-                  color="bg-brand-gold"
+                  color="bg-blue-500"
                   isActive={chartTimeframe === 'week'}
                   onClick={() => setChartTimeframe('week')}
                 />
@@ -1982,7 +1982,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   label={t(language, 'this_month')}
                   value={getUserSalesCount(selectedUser.id, 'month')}
                   icon={<CalendarDays />}
-                  color="bg-white/10"
+                  color="bg-blue-500"
                   isActive={chartTimeframe === 'month'}
                   onClick={() => setChartTimeframe('month')}
                 />
@@ -1990,13 +1990,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   label={t(language, 'phone')}
                   value={selectedUser.phone?.startsWith('+') ? selectedUser.phone : '+' + selectedUser.phone}
                   icon={<Phone />}
-                  color="bg-brand-gold"
+                  color="bg-blue-500"
                 />
                 <RefinedStatCard
                   label={t(language, 'total')}
                   value={getUserSalesCount(selectedUser.id, 'total')}
                   icon={<Award />}
-                  color="bg-white/10"
+                  color="bg-blue-500"
                   isActive={chartTimeframe === 'year'}
                   onClick={() => setChartTimeframe('year')}
                 />
@@ -2516,7 +2516,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           <>
                             <div className={`p-6 rounded-[2rem] border-2 transition-all duration-300 flex flex-col gap-2 shadow-sm ${arrivalCardStyle}`}>
                               <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-2xl shadow-md ${ci ? (lateness ? 'bg-red-600 text-white' : 'bg-green-600 text-white') : 'bg-red-600 text-white'}`}><LogInIcon className="w-5 h-5" /></div>
+                                <div className={`p-3 rounded-2xl shadow-md ${ci ? (lateness ? 'bg-red-600 text-white keep-white' : 'bg-green-600 text-white keep-white') : 'bg-red-600 text-white keep-white'}`}><LogInIcon className="w-5 h-5 keep-white" /></div>
                                 <div className="flex-1">
                                   <div className="flex justify-between items-start">
                                     <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Kelish</p>
@@ -2571,7 +2571,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                             </div>
                             <div className={`p-6 rounded-[2rem] border-2 flex flex-col gap-2 shadow-sm transition-all ${departureCardStyle}`}>
                               <div className="flex items-center gap-4">
-                                <div className={`p-3 rounded-2xl shadow-md ${co ? (earlyDeparture ? 'bg-orange-500 text-white' : 'bg-blue-500 text-white') : 'bg-white/10 text-white/30'}`}><LogOutIcon className="w-5 h-5" /></div>
+                                <div className={`p-3 rounded-2xl shadow-md ${co ? (earlyDeparture ? 'bg-orange-500 text-white keep-white' : 'bg-blue-500 text-white keep-white') : 'bg-white/10 text-white/40'}`}><LogOutIcon className={`w-5 h-5 ${co ? 'keep-white' : ''}`} /></div>
                                 <div className="flex-1">
                                   <div className="flex justify-between items-start">
                                     <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Ketish</p>
@@ -2726,7 +2726,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                   className={`p-2 rounded-xl transition-all duration-200 transform hover:scale-125 active:scale-95 ${
                                     isActive
                                       ? 'text-brand-gold drop-shadow-[0_0_8px_rgba(218,165,32,0.5)]'
-                                      : 'text-white/15 hover:text-white/30'
+                                      : isDarkMode ? 'text-white/15 hover:text-white/30' : 'text-blue-400/50 hover:text-blue-500/80'
                                   }`}
                                 >
                                   <Star
