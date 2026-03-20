@@ -1120,6 +1120,7 @@ const ArrivalChecker: React.FC = () => {
                           <Route path="/" element={<Navigate to="/manager/overview" replace />} />
                           <Route path="/manager/overview" element={<ManagerPanel {...managerProps} activeTab="overview" />} />
                           <Route path="/manager/users" element={<ManagerPanel {...managerProps} activeTab="users" />} />
+                          <Route path="/manager/users/:userNameOrId" element={<ManagerPanel {...managerProps} activeTab="users" />} />
                           <Route path="/manager/monitoring" element={<ManagerPanel {...managerProps} activeTab="monitoring" />} />
                           <Route path="/manager/rating" element={<ManagerPanel {...managerProps} activeTab="rating" />} />
                           <Route path="/manager/reports" element={<ManagerPanel {...managerProps} activeTab="reports" />} />

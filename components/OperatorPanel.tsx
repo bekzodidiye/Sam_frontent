@@ -1297,7 +1297,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 />
                 <RefinedStatCard
                   label={t(language, 'phone')}
-                  value={selectedUser.phone}
+                  value={selectedUser.phone?.startsWith('+') ? selectedUser.phone : '+' + selectedUser.phone}
                   icon={<Phone />}
                   color="bg-brand-gold"
                 />
@@ -2408,7 +2408,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                   <div className="flex flex-wrap justify-center md:justify-start gap-3">
                     <div className="px-4 py-2 bg-brand-black rounded-xl border border-white/10 flex items-center gap-2 text-white/60 font-bold text-xs">
                       <Smartphone className="w-4 h-4 text-brand-gold" />
-                      {user.phone}
+                      {user.phone?.startsWith('+') ? user.phone : '+' + user.phone}
                     </div>
                     <div className="px-4 py-2 bg-brand-black rounded-xl border border-white/10 flex items-center gap-2 text-white/60 font-bold text-xs">
                       <Calendar className="w-4 h-4 text-brand-gold" />

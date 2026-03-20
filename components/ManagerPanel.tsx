@@ -1,5 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { Role, AppState, User, CheckIn, SimSale, DailyReport, SalesLink } from '../types';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -354,8 +355,51 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   refreshData,
   showNotification 
 }) => {
+  const today = getTodayStr();
   const [expandedCard, setExpandedCard] = useState<string | null>(null);
-  const [selectedUserId, setSelectedUserId] = useState<string | null>(null);
+
+  const { userNameOrId } = useParams<{ userNameOrId?: string }>();
+  const navigate = useNavigate();
+
+  const [selectedUserIdInternal, setSelectedUserIdInternal] = useState<string | null>(null);
+
+  const setSelectedUserId = (id: string | null | ((prev: string | null) => string | null)) => {
+    const newId = typeof id === 'function' ? id(selectedUserIdInternal) : id;
+    if (activeTab === 'users') {
+      if (newId) {
+        const u = state.users.find(x => x.id === newId);
+        if (u) {
+          const param = u.nickname || u.username || u.phone || u.id;
+          navigate(`/manager/users/${encodeURIComponent(param)}`);
+        }
+      } else {
+        navigate(`/manager/users`);
+      }
+    }
+    setSelectedUserIdInternal(newId);
+  };
+
+  const selectedUserId = selectedUserIdInternal;
+
+  useEffect(() => {
+    if (activeTab === 'users') {
+      if (userNameOrId) {
+        const decoded = decodeURIComponent(userNameOrId);
+        const user = state.users.find(u => 
+          u.nickname === decoded || 
+          u.username === decoded || 
+          u.phone === decoded || 
+          u.phone === '+' + decoded ||
+          u.id === decoded
+        );
+        if (user && selectedUserIdInternal !== user.id) {
+          setSelectedUserIdInternal(user.id);
+        }
+      } else if (selectedUserIdInternal !== null) {
+        setSelectedUserIdInternal(null);
+      }
+    }
+  }, [activeTab, userNameOrId, state.users]);
   const [mapSelectedUserId, setMapSelectedUserId] = useState<string | null>(null);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [editingTime, setEditingTime] = useState<{ type: 'checkIn' | 'checkOut', current: string } | null>(null);
@@ -388,7 +432,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   const [messageText, setMessageText] = useState('');
 
   // Monitoring Tab State
-  const [monitoringTimeframe, setMonitoringTimeframe] = useState<'week' | 'month' | 'year'>('week');
+  const [monitoringTimeframe, setMonitoringTimeframe] = useState<'today' | 'month' | 'year'>('today');
   const [monitoringWeekOffset, setMonitoringWeekOffset] = useState(0);
   const [monitoringMonthOffset, setMonitoringMonthOffset] = useState(0);
   const [monitoringYear, setMonitoringYear] = useState(new Date().getFullYear());
@@ -411,6 +455,73 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   const staffPerPage = 12;
   const [reportsPage, setReportsPage] = useState(1);
   const reportsPerPage = 9;
+
+  const userSalesPerPage = 5;
+  const [userSalesPage, setUserSalesPage] = useState(1);
+  const userReportsPerPage = 3;
+  const [userReportsPage, setUserReportsPage] = useState(1);
+
+  const userFilteredSales = useMemo(() => {
+    if (!selectedUserIdInternal) return [];
+    let daySales = [];
+    if (selectedDay) {
+      if (chartTimeframe === 'year') {
+        const monthPrefix = selectedDay.substring(0, 7);
+        daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date.startsWith(monthPrefix));
+      } else {
+        daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date === selectedDay);
+      }
+    } else if (chartTimeframe === 'year') {
+      const yearPrefix = selectedYear.toString();
+      daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date.startsWith(yearPrefix));
+    } else if (chartTimeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monthOffset);
+      const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date.startsWith(monthPrefix));
+    } else {
+      daySales = state.sales.filter(s => s.userId === selectedUserIdInternal && s.date === today);
+    }
+    return daySales.sort((a, b) => {
+      const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
+      return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
+    });
+  }, [selectedUserIdInternal, state.sales, selectedDay, chartTimeframe, selectedYear, monthOffset]);
+
+  const userFilteredReports = useMemo(() => {
+    if (!selectedUserIdInternal) return [];
+    let timeframeReports = [];
+    if (selectedDay) {
+      if (chartTimeframe === 'year') {
+        const monthPrefix = selectedDay.substring(0, 7);
+        timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date.startsWith(monthPrefix));
+      } else {
+        timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date === selectedDay);
+      }
+    } else if (chartTimeframe === 'year') {
+      const yearPrefix = selectedYear.toString();
+      timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date.startsWith(yearPrefix));
+    } else if (chartTimeframe === 'month') {
+      const d = new Date();
+      d.setDate(1);
+      d.setMonth(d.getMonth() + monthOffset);
+      const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date.startsWith(monthPrefix));
+    } else {
+      timeframeReports = state.reports.filter(r => r.userId === selectedUserIdInternal && r.date === today);
+    }
+    return timeframeReports.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+  }, [selectedUserIdInternal, state.reports, selectedDay, chartTimeframe, selectedYear, monthOffset]);
+  
+  const paginatedUserSales = useMemo(() => userFilteredSales.slice((userSalesPage - 1) * userSalesPerPage, userSalesPage * userSalesPerPage), [userFilteredSales, userSalesPage]);
+  const paginatedUserReports = useMemo(() => userFilteredReports.slice((userReportsPage - 1) * userReportsPerPage, userReportsPage * userReportsPerPage), [userFilteredReports, userReportsPage]);
+
+  // Sync these when timeframe or user changes
+  useEffect(() => {
+    setUserSalesPage(1);
+    setUserReportsPage(1);
+  }, [selectedUserIdInternal, chartTimeframe, selectedDay, monthOffset, selectedYear, weekOffset]);
 
   const [targetMonth, setTargetMonth] = useState(new Date().toISOString().slice(0, 7)); // YYYY-MM
   const [showMonthPicker, setShowMonthPicker] = useState(false);
@@ -636,7 +747,6 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     }
   };
 
-  const today = getTodayStr();
   const approvedUsers = useMemo(() => state.users.filter(u => u.isApproved), [state.users]);
   const operators = useMemo(() => approvedUsers.filter(u => u.role !== Role.MANAGER), [approvedUsers]);
   const pendingUsers = useMemo(() => state.users.filter(u => !u.isApproved), [state.users]);
@@ -804,20 +914,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   const monitoringPeriodSales = useMemo(() => {
     let filteredSales = state.sales;
 
-    if (monitoringTimeframe === 'week') {
+    if (monitoringTimeframe === 'today') {
       const d = getUzTime();
-      const currentDayIndex = d.getDay();
-      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
-      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
-      targetMonday.setHours(0, 0, 0, 0);
-      const targetSunday = new Date(targetMonday);
-      targetSunday.setDate(targetMonday.getDate() + 6);
-      targetSunday.setHours(23, 59, 59, 999);
-
-      filteredSales = filteredSales.filter(s => {
-        const sd = new Date(s.date);
-        return sd >= targetMonday && sd <= targetSunday;
-      });
+      d.setDate(d.getDate() + monitoringWeekOffset);
+      const targetDate = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      filteredSales = filteredSales.filter(s => s.date === targetDate);
     } else if (monitoringTimeframe === 'month') {
       const d = new Date();
       d.setDate(1);
@@ -835,23 +936,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
   const monitoringChartData = useMemo(() => {
     const data = [];
-    if (monitoringTimeframe === 'week') {
+    if (monitoringTimeframe === 'today') {
       const d = getUzTime();
-      const currentDayIndex = d.getDay();
-      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
-      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
-      const uzDays = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Juma', 'Shan'];
+      d.setDate(d.getDate() + monitoringWeekOffset);
+      const dateStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 
-      for (let i = 0; i < 7; i++) {
-        const current = new Date(targetMonday);
-        current.setDate(targetMonday.getDate() + i);
-        const dateStr = `${current.getFullYear()}-${String(current.getMonth() + 1).padStart(2, '0')}-${String(current.getDate()).padStart(2, '0')}`;
-
-        const daySales = monitoringPeriodSales.filter(s => s.date === dateStr);
-        const simcards = daySales.reduce((sum, s) => sum + s.count, 0);
-        const bonuses = daySales.reduce((sum, s) => sum + s.bonus, 0);
-        data.push({ name: uzDays[current.getDay()], simcards, bonuses, fullDate: dateStr });
-      }
+      const daySales = monitoringPeriodSales.filter(s => s.date === dateStr);
+      const simcards = daySales.reduce((sum, s) => sum + s.count, 0);
+      const bonuses = daySales.reduce((sum, s) => sum + s.bonus, 0);
+      data.push({ name: 'Bugun', simcards, bonuses, fullDate: dateStr });
     } else if (monitoringTimeframe === 'month') {
       const d = new Date();
       d.setDate(1);
@@ -917,6 +1010,21 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     const totalAll = Object.values(companyTotals).reduce((a, b) => a + b, 0);
     return { companyTotals, totalAll };
   }, [tableSales]);
+
+  const sortedOperators = useMemo(() => {
+    const operators = state.users.filter(u => u.role !== 'manager');
+    return operators.sort((a, b) => {
+      const salesA = tableSales.filter(s => s.userId === a.id);
+      const salesB = tableSales.filter(s => s.userId === b.id);
+      const maxTimeA = salesA.length > 0 ? Math.max(...salesA.map(s => new Date(s.timestamp || s.date).getTime())) : 0;
+      const maxTimeB = salesB.length > 0 ? Math.max(...salesB.map(s => new Date(s.timestamp || s.date).getTime())) : 0;
+      if (maxTimeB !== maxTimeA) return maxTimeB - maxTimeA;
+      
+      const totalA = salesA.reduce((sum, s) => sum + s.count + s.bonus, 0);
+      const totalB = salesB.reduce((sum, s) => sum + s.count + s.bonus, 0);
+      return totalB - totalA;
+    });
+  }, [state.users, tableSales]);
 
   return (
     <div className="space-y-6">
@@ -1289,10 +1397,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
               <div className="flex p-1 bg-brand-black rounded-xl border border-white/10">
                 <button
-                  onClick={() => setMonitoringTimeframe('week')}
-                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'week' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
+                  onClick={() => setMonitoringTimeframe('today')}
+                  className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'today' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
                 >
-                  Hafta
+                  Bugun
                 </button>
                 <button
                   onClick={() => setMonitoringTimeframe('month')}
@@ -1311,7 +1419,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="flex items-center justify-between sm:justify-start gap-1 bg-brand-black p-1 rounded-xl border border-white/10">
                 <button
                   onClick={() => {
-                    if (monitoringTimeframe === 'week') setMonitoringWeekOffset(prev => prev - 1);
+                    setMonitoringSelectedDay(null);
+                    if (monitoringTimeframe === 'today') setMonitoringWeekOffset(prev => prev - 1);
                     else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev - 1);
                     else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev - 1);
                   }}
@@ -1319,23 +1428,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 >
                   <ChevronLeft className="w-4 h-4" />
                 </button>
-                <span className="text-[10px] font-black text-brand-gold px-3 uppercase tracking-widest min-w-[100px] sm:min-w-[120px] text-center">
+                <span className="text-[10px] sm:text-xs font-black text-white/60 px-2 sm:px-4 uppercase tracking-widest min-w-[100px] sm:min-w-[140px] text-center">
                   {(() => {
-                    if (monitoringTimeframe === 'week') {
-                      const d = new Date();
-                      const currentDayIndex = d.getDay();
-                      const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
-                      const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (monitoringWeekOffset * 7));
-                      const targetSunday = new Date(targetMonday);
-                      targetSunday.setDate(targetMonday.getDate() + 6);
-                      const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
-                      return `${targetMonday.getDate()} ${monthNames[targetMonday.getMonth()]} - ${targetSunday.getDate()} ${monthNames[targetSunday.getMonth()]}`;
+                    if (monitoringTimeframe === 'today') {
+                      const d = getUzTime();
+                      d.setDate(d.getDate() + monitoringWeekOffset);
+                      return `${d.getDate()}-${['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'][d.getMonth()]} ${d.getFullYear()}`;
                     } else if (monitoringTimeframe === 'month') {
                       const d = new Date();
                       d.setDate(1);
                       d.setMonth(d.getMonth() + monitoringMonthOffset);
-                      const monthNames = ["Yanvar", "Fevral", "Mart", "Aprel", "May", "Iyun", "Iyul", "Avgust", "Sentabr", "Oktabr", "Noyabr", "Dekabr"];
-                      return `${monthNames[d.getMonth()]} ${d.getFullYear()}`;
+                      return `${['Yanvar', 'Fevral', 'Mart', 'Aprel', 'May', 'Iyun', 'Iyul', 'Avgust', 'Sentabr', 'Oktabr', 'Noyabr', 'Dekabr'][d.getMonth()]} ${d.getFullYear()}`;
                     } else {
                       return monitoringYear.toString();
                     }
@@ -1343,7 +1446,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 </span>
                 <button
                   onClick={() => {
-                    if (monitoringTimeframe === 'week') setMonitoringWeekOffset(prev => prev + 1);
+                    setMonitoringSelectedDay(null);
+                    if (monitoringTimeframe === 'today') setMonitoringWeekOffset(prev => prev + 1);
                     else if (monitoringTimeframe === 'month') setMonitoringMonthOffset(prev => prev + 1);
                     else if (monitoringTimeframe === 'year') setMonitoringYear(prev => prev + 1);
                   }}
@@ -1436,7 +1540,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     dataKey="simcards"
                     fill="var(--theme-gold)"
                     radius={[4, 4, 0, 0]}
-                    barSize={monitoringTimeframe === 'week' ? 20 : undefined}
+                    barSize={monitoringTimeframe === 'today' ? 40 : undefined}
                     onClick={(data, index, e) => {
                       if (e && e.stopPropagation) e.stopPropagation();
                       if (data && data.fullDate) {
@@ -1521,8 +1625,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {state.users
-                    .filter(u => u.role !== 'manager')
+                  {sortedOperators
                     .slice((monitoringOperatorsPage - 1) * monitoringOperatorsPerPage, monitoringOperatorsPage * monitoringOperatorsPerPage)
                     .map(u => {
                     // Calculate sales for this user in the selected timeframe or day
@@ -1557,7 +1660,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           </div>
                           <div className="min-w-0">
                             <p className="font-bold text-white text-xs sm:text-sm truncate">{u.firstName} {u.lastName}</p>
-                            <p className="text-[8px] sm:text-[9px] font-black text-white/30 uppercase tracking-widest truncate">{u.phone}</p>
+                            <p className="text-[8px] sm:text-[9px] font-black text-white/30 uppercase tracking-widest truncate">{u.phone?.startsWith('+') ? u.phone : '+' + u.phone}</p>
                           </div>
                         </td>
                         <td className="px-4 sm:px-8 py-4 sm:py-5 text-center font-bold text-[#9b51e0] text-sm sm:text-base">{sales['Ucell'].toLocaleString()}</td>
@@ -1574,8 +1677,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
             {/* Mobile Card View */}
             <div className="sm:hidden p-4 space-y-4">
-              {state.users
-                .filter(u => u.role !== 'manager')
+              {sortedOperators
                 .slice((monitoringOperatorsPage - 1) * monitoringOperatorsPerPage, monitoringOperatorsPage * monitoringOperatorsPerPage)
                 .map(u => {
                 const getUserSales = () => {
@@ -1609,7 +1711,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         </div>
                         <div>
                           <p className="font-bold text-white text-sm">{u.firstName} {u.lastName}</p>
-                          <p className="text-[10px] text-white/30 font-black uppercase tracking-widest">{u.phone}</p>
+                          <p className="text-[10px] text-white/30 font-black uppercase tracking-widest">{u.phone?.startsWith('+') ? u.phone : '+' + u.phone}</p>
                         </div>
                       </div>
                       <div className="text-right">
@@ -1772,7 +1874,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     <h2 className="text-xl sm:text-2xl font-black text-white leading-tight truncate">{selectedUser.firstName} {selectedUser.lastName}</h2>
                     <div className="flex items-center gap-2 mt-1">
                       <span className="bg-brand-gold text-brand-black text-[7px] sm:text-[8px] font-black px-2 py-0.5 sm:py-1 rounded-full uppercase tracking-widest shadow-sm shrink-0">{selectedUser.role.replace('_', ' ')}</span>
-                      <span className="text-white/40 text-[9px] sm:text-[10px] font-bold truncate">● {selectedUser.phone}</span>
+                      <span className="text-white/40 text-[9px] sm:text-[10px] font-bold truncate">● {selectedUser.phone?.startsWith('+') ? selectedUser.phone : '+' + selectedUser.phone}</span>
                     </div>
                   </div>
                 </div>
@@ -1886,7 +1988,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 />
                 <RefinedStatCard
                   label={t(language, 'phone')}
-                  value={selectedUser.phone}
+                  value={selectedUser.phone?.startsWith('+') ? selectedUser.phone : '+' + selectedUser.phone}
                   icon={<Phone />}
                   color="bg-brand-gold"
                 />
@@ -2087,31 +2189,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                             const d = new Date(selectedDay);
                             const monthName = translations[language].month_names[d.getMonth()];
                             return `${monthName} ${d.getFullYear()}`;
-                          })()} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
+                          })()} ${t(language, 'monthly_sales_title')}` : `${selectedDay} ${t(language, 'daily_sales_title')}`) : (chartTimeframe === 'year' ? `${selectedYear} ${t(language, 'yearly')} sotuvlar ro'yxati` : chartTimeframe === 'month' ? `${chartTitleLabel} ${t(language, 'monthly_sales_title')}` : `${today} ${t(language, 'daily_sales_title')}`)}
                         </h3>
                       </div>
 
                       <div className="flex flex-wrap justify-center items-center gap-2 w-full md:w-auto md:absolute md:left-1/2 md:-translate-x-1/2">
                         {(() => {
-                          const targetDate = selectedDay || today;
-                          let daySales = [];
-                          if (selectedDay) {
-                            if (chartTimeframe === 'year') {
-                              const monthPrefix = selectedDay.substring(0, 7);
-                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
-                            } else {
-                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
-                            }
-                          } else if (chartTimeframe === 'month') {
-                            const d = new Date();
-                            d.setDate(1);
-                            d.setMonth(d.getMonth() + monthOffset);
-                            const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                            daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
-                          } else {
-                            daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
-                          }
-
                           const companies = [
                             { name: 'Ucell', color: 'border-[#9b51e0]/20 text-[#9b51e0] bg-[#9b51e0]/10' },
                             { name: 'Uztelecom', color: 'border-[#009ee0]/20 text-[#009ee0] bg-[#009ee0]/10' },
@@ -2120,7 +2203,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           ];
 
                           return companies.map(c => {
-                            const count = daySales.filter(s => s.company === c.name).reduce((acc, s) => acc + s.count + s.bonus, 0);
+                            const count = userFilteredSales.filter(s => s.company === c.name).reduce((acc, s) => acc + s.count + s.bonus, 0);
                             return (
                               <div key={c.name} className={`px-3 py-1.5 rounded-lg border ${c.color} font-bold text-xs flex items-center gap-2`}>
                                 <span className="uppercase text-[10px] opacity-70">{c.name}:</span>
@@ -2154,25 +2237,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         </thead>
                         <tbody className="divide-y divide-white/5">
                           {(() => {
-                            let daySales = [];
-                            if (selectedDay) {
-                              if (chartTimeframe === 'year') {
-                                const monthPrefix = selectedDay.substring(0, 7);
-                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
-                              } else {
-                                daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
-                              }
-                            } else if (chartTimeframe === 'month') {
-                              const d = new Date();
-                              d.setDate(1);
-                              d.setMonth(d.getMonth() + monthOffset);
-                              const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
-                            } else {
-                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
-                            }
-
-                            if (daySales.length === 0) {
+                            if (userFilteredSales.length === 0) {
                               return (
                                 <tr>
                                   <td colSpan={6} className="px-4 sm:px-8 py-10 sm:py-20 text-center">
@@ -2186,10 +2251,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                 </tr>
                               );
                             }
-                            return daySales.sort((a, b) => {
-                              const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
-                              return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
-                            }).map(sale => (
+                            return paginatedUserSales.map(sale => (
                               <tr key={sale.id} className="hover:bg-white/5 transition group">
                                 <td className="px-4 sm:px-8 py-4 sm:py-5">
                                   <span className={`px-2 sm:px-3 py-1 rounded-lg text-[8px] sm:text-[10px] font-black uppercase transition-colors border whitespace-nowrap ${sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20 group-hover:bg-[#9b51e0] group-hover:text-white' :
@@ -2216,30 +2278,33 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           })()}
                         </tbody>
                       </table>
+                      {userFilteredSales.length > userSalesPerPage && (
+                        <div className="flex items-center justify-center gap-3 p-4 border-t border-white/5">
+                          <button
+                            onClick={() => setUserSalesPage(p => Math.max(1, p - 1))}
+                            disabled={userSalesPage === 1}
+                            className="p-2 border border-white/10 rounded-lg text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                          >
+                            <ChevronLeft className="w-5 h-5" />
+                          </button>
+                          <span className="text-[10px] font-black text-white/50">
+                            {userSalesPage} / {Math.ceil(userFilteredSales.length / userSalesPerPage)}
+                          </span>
+                          <button
+                            onClick={() => setUserSalesPage(p => Math.min(Math.ceil(userFilteredSales.length / userSalesPerPage), p + 1))}
+                            disabled={userSalesPage === Math.ceil(userFilteredSales.length / userSalesPerPage)}
+                            className="p-2 border border-white/10 rounded-lg text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                          >
+                            <ChevronRight className="w-5 h-5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Mobile Card View */}
                     <div className="sm:hidden p-4 space-y-4">
                       {(() => {
-                        let daySales = [];
-                        if (selectedDay) {
-                          if (chartTimeframe === 'year') {
-                            const monthPrefix = selectedDay.substring(0, 7);
-                            daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
-                          } else {
-                            daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === selectedDay);
-                          }
-                        } else if (chartTimeframe === 'month') {
-                          const d = new Date();
-                          d.setDate(1);
-                          d.setMonth(d.getMonth() + monthOffset);
-                          const monthPrefix = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date.startsWith(monthPrefix));
-                        } else {
-                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
-                        }
-
-                        if (daySales.length === 0) {
+                        if (userFilteredSales.length === 0) {
                           return (
                             <div className="flex flex-col items-center gap-3 py-10 text-center">
                               <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-white/10">
@@ -2250,49 +2315,71 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           );
                         }
 
-                        return daySales.sort((a, b) => {
-                          const order = { 'Ucell': 1, 'Uztelecom': 2, 'Mobiuz': 3, 'Beeline': 4 };
-                          return (order[a.company as keyof typeof order] || 99) - (order[b.company as keyof typeof order] || 99) || b.timestamp.localeCompare(a.timestamp);
-                        }).map(sale => (
-                          <div key={sale.id} className="bg-brand-black p-5 rounded-2xl border border-white/5 hover:border-brand-gold/30 transition-all shadow-sm">
-                            <div className="flex items-center justify-between mb-4">
-                              <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border ${sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20' :
-                                sale.company === 'Uztelecom' ? 'bg-[#009ee0]/10 text-[#009ee0] border-[#009ee0]/20' :
-                                  sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24] border-[#eb1c24]/20' :
-                                    sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913] border-[#fdb913]/20' :
-                                      'bg-brand-gold/10 text-brand-gold border-brand-gold/20'
-                                }`}>
-                                {sale.company}
-                              </span>
-                              <div className="text-right">
-                                <p className="text-[9px] font-black text-brand-gold bg-brand-gold/10 px-2 py-1 rounded-lg">
-                                  {formatUzTime(sale.timestamp)}
-                                </p>
-                                <p className="text-[7px] font-bold text-white/20 mt-0.5">{new Date(sale.timestamp).toLocaleDateString()}</p>
-                              </div>
-                            </div>
+                        return (
+                          <>
+                            {paginatedUserSales.map(sale => (
+                              <div key={sale.id} className="bg-brand-black p-5 rounded-2xl border border-white/5 hover:border-brand-gold/30 transition-all shadow-sm">
+                                <div className="flex items-center justify-between mb-4">
+                                  <span className={`px-2 py-1 rounded-lg text-[9px] font-black uppercase border ${sale.company === 'Ucell' ? 'bg-[#9b51e0]/10 text-[#9b51e0] border-[#9b51e0]/20' :
+                                    sale.company === 'Uztelecom' ? 'bg-[#009ee0]/10 text-[#009ee0] border-[#009ee0]/20' :
+                                      sale.company === 'Mobiuz' ? 'bg-[#eb1c24]/10 text-[#eb1c24] border-[#eb1c24]/20' :
+                                        sale.company === 'Beeline' ? 'bg-[#fdb913]/10 text-[#fdb913] border-[#fdb913]/20' :
+                                          'bg-brand-gold/10 text-brand-gold border-brand-gold/20'
+                                    }`}>
+                                    {sale.company}
+                                  </span>
+                                  <div className="text-right">
+                                    <p className="text-[9px] font-black text-brand-gold bg-brand-gold/10 px-2 py-1 rounded-lg">
+                                      {formatUzTime(sale.timestamp)}
+                                    </p>
+                                    <p className="text-[7px] font-bold text-white/20 mt-0.5">{new Date(sale.timestamp).toLocaleDateString()}</p>
+                                  </div>
+                                </div>
 
-                            <div className="mb-4">
-                              <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Tarif</p>
-                              <p className="text-sm font-bold text-white">{sale.tariff}</p>
-                            </div>
+                                <div className="mb-4">
+                                  <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Tarif</p>
+                                  <p className="text-sm font-bold text-white">{sale.tariff}</p>
+                                </div>
 
-                            <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
-                              <div className="text-center">
-                                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Soni</p>
-                                <p className="text-sm font-black text-brand-gold">{sale.count}</p>
+                                <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
+                                  <div className="text-center">
+                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Soni</p>
+                                    <p className="text-sm font-black text-brand-gold">{sale.count}</p>
+                                  </div>
+                                  <div className="text-center border-l border-white/5">
+                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Bonus</p>
+                                    <p className="text-sm font-black text-white/70">{sale.bonus}</p>
+                                  </div>
+                                  <div className="text-center border-l border-white/5">
+                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Jami</p>
+                                    <p className="text-sm font-black text-brand-gold">{sale.count + sale.bonus}</p>
+                                  </div>
+                                </div>
                               </div>
-                              <div className="text-center border-l border-white/5">
-                                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Bonus</p>
-                                <p className="text-sm font-black text-white/70">{sale.bonus}</p>
+                            ))}
+                            {userFilteredSales.length > userSalesPerPage && (
+                              <div className="flex items-center justify-center gap-3 mt-4 pt-4 border-t border-white/5">
+                                <button
+                                  onClick={() => setUserSalesPage(p => Math.max(1, p - 1))}
+                                  disabled={userSalesPage === 1}
+                                  className="p-2 border border-white/10 rounded-lg text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                                >
+                                  <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <span className="text-[10px] font-black text-white/50">
+                                  {userSalesPage} / {Math.ceil(userFilteredSales.length / userSalesPerPage)}
+                                </span>
+                                <button
+                                  onClick={() => setUserSalesPage(p => Math.min(Math.ceil(userFilteredSales.length / userSalesPerPage), p + 1))}
+                                  disabled={userSalesPage === Math.ceil(userFilteredSales.length / userSalesPerPage)}
+                                  className="p-2 border border-white/10 rounded-lg text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                                >
+                                  <ChevronRight className="w-5 h-5" />
+                                </button>
                               </div>
-                              <div className="text-center border-l border-white/5">
-                                <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Jami</p>
-                                <p className="text-sm font-black text-brand-gold">{sale.count + sale.bonus}</p>
-                              </div>
-                            </div>
-                          </div>
-                        ));
+                            )}
+                          </>
+                        );
                       })()}
                     </div>
                   </div>
@@ -2309,63 +2396,87 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     </div>
                     <div className="p-8">
                       {(() => {
-                        const targetDate = selectedDay || today;
-                        const dailyReport = state.reports.find(r => r.userId === selectedUser.id && r.date === targetDate);
-
-                        if (!dailyReport) {
+                        if (userFilteredReports.length === 0) {
                           return (
                             <div className="flex flex-col items-center py-10 text-center gap-4">
                               <div className="w-14 h-14 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                 <AlertTriangle className="w-8 h-8" />
                               </div>
-                              <p className="text-sm font-black text-white/20 italic">Bu kun uchun hisobot yuborilmagan</p>
+                              <p className="text-sm font-black text-white/20 italic">Bu davr uchun hisobotlar yuborilmagan</p>
                             </div>
                           );
                         }
 
                         return (
                           <div className="space-y-10">
-                            {dailyReport.photos && dailyReport.photos.length > 0 && (
-                              <div className="space-y-5">
-                                <div className="flex items-center gap-3 px-2">
-                                  <div className="w-7 h-7 bg-brand-gold/10 rounded-lg flex items-center justify-center">
-                                    <LayoutGrid className="w-4 h-4 text-brand-gold" />
-                                  </div>
-                                  <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">ILOVA QILINGAN RASMLAR ({dailyReport.photos.length})</p>
-                                </div>
-                                <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
-                                  {dailyReport.photos.map((photo, idx) => (
-                                    <div
-                                      key={idx}
-                                      className="relative group cursor-pointer overflow-hidden rounded-[2.2rem] border-4 border-white/10 shadow-xl aspect-square transition-all hover:scale-[1.02]"
-                                      onClick={() => setViewingPhoto(photo)}
-                                    >
-                                      <img src={getMediaUrl(photo)} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" referrerPolicy="no-referrer" />
-                                      <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                        <div className="bg-white/20 backdrop-blur-md p-3 rounded-full border border-white/30 text-white scale-75 group-hover:scale-100 transition-all">
-                                          <Maximize2 className="w-6 h-6" />
-                                        </div>
+                            {paginatedUserReports.map(dailyReport => (
+                              <div key={dailyReport.id} className="space-y-10 border-b border-white/10 pb-10 last:border-0 last:pb-0">
+                                <h4 className="text-xl font-black text-brand-gold bg-brand-gold/10 px-4 py-2 rounded-xl inline-block">{dailyReport.date}</h4>
+                                {dailyReport.photos && dailyReport.photos.length > 0 && (
+                                  <div className="space-y-5">
+                                    <div className="flex items-center gap-3 px-2">
+                                      <div className="w-7 h-7 bg-brand-gold/10 rounded-lg flex items-center justify-center">
+                                        <LayoutGrid className="w-4 h-4 text-brand-gold" />
                                       </div>
+                                      <p className="text-[10px] font-black text-white/30 uppercase tracking-[0.15em]">ILOVA QILINGAN RASMLAR ({dailyReport.photos.length})</p>
                                     </div>
-                                  ))}
+                                    <div className="grid grid-cols-2 md:grid-cols-3 gap-6">
+                                      {dailyReport.photos.map((photo, idx) => (
+                                        <div
+                                          key={idx}
+                                          className="relative group cursor-pointer overflow-hidden rounded-[2.2rem] border-4 border-white/10 shadow-xl aspect-square transition-all hover:scale-[1.02]"
+                                          onClick={() => setViewingPhoto(photo)}
+                                        >
+                                          <img src={getMediaUrl(photo)} className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110" referrerPolicy="no-referrer" />
+                                          <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
+                                            <div className="bg-white/20 backdrop-blur-md p-3 rounded-full border border-white/30 text-white scale-75 group-hover:scale-100 transition-all">
+                                              <Maximize2 className="w-6 h-6" />
+                                            </div>
+                                          </div>
+                                        </div>
+                                      ))}
+                                    </div>
+                                  </div>
+                                )}
+
+                                <div className="bg-brand-black rounded-[2rem] border border-white/10 p-8 shadow-sm flex flex-col gap-6">
+                                  <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                      <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
+                                      <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Kunlik Xulosa</span>
+                                    </div>
+                                    <span className="text-[10px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-full border border-brand-gold/20">
+                                      {formatUzTime(dailyReport.timestamp)}
+                                    </span>
+                                  </div>
+                                  <p className="text-white font-bold text-2xl leading-relaxed tracking-tight">
+                                    {dailyReport.summary}
+                                  </p>
                                 </div>
+                              </div>
+                            ))}
+                            
+                            {userFilteredReports.length > userReportsPerPage && (
+                              <div className="flex items-center justify-center gap-3 pt-4">
+                                <button
+                                  onClick={() => setUserReportsPage(p => Math.max(1, p - 1))}
+                                  disabled={userReportsPage === 1}
+                                  className="p-2 border border-white/10 rounded-lg text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                                >
+                                  <ChevronLeft className="w-5 h-5" />
+                                </button>
+                                <span className="text-[10px] font-black text-white/50">
+                                  {userReportsPage} / {Math.ceil(userFilteredReports.length / userReportsPerPage)}
+                                </span>
+                                <button
+                                  onClick={() => setUserReportsPage(p => Math.min(Math.ceil(userFilteredReports.length / userReportsPerPage), p + 1))}
+                                  disabled={userReportsPage === Math.ceil(userFilteredReports.length / userReportsPerPage)}
+                                  className="p-2 border border-white/10 rounded-lg text-white/40 hover:text-white disabled:opacity-30 disabled:hover:text-white/40 transition-all shadow-sm"
+                                >
+                                  <ChevronRight className="w-5 h-5" />
+                                </button>
                               </div>
                             )}
-
-                            <div className="bg-brand-black rounded-[2rem] border border-white/10 p-8 shadow-sm flex flex-col gap-6">
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2">
-                                  <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
-                                  <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Kunlik Xulosa</span>
-                                </div>
-                                <span className="text-[10px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-full border border-brand-gold/20">
-                                  {formatUzTime(dailyReport.timestamp)}
-                                </span>
-                              </div>
-                              <p className="text-white font-bold text-2xl leading-relaxed tracking-tight">
-                                {dailyReport.summary}
-                              </p>
-                            </div>
                           </div>
                         );
                       })()}

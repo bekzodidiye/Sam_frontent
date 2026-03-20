@@ -43,9 +43,9 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
 
       const tileUrl = isDarkMode
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
 
-      tileLayerRef.current = L.tileLayer(tileUrl, { attribution: isDarkMode ? '&copy; CARTO' : '&copy; OpenStreetMap', maxZoom: 20 });
+      tileLayerRef.current = L.tileLayer(tileUrl, { attribution: isDarkMode ? '&copy; CARTO' : '&copy; Google Maps', maxZoom: 20 });
       tileLayerRef.current.addTo(leafletMap.current);
       L.control.zoom({ position: 'bottomright' }).addTo(leafletMap.current);
       markersGroup.current = L.layerGroup().addTo(leafletMap.current);
@@ -72,12 +72,12 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
     if (leafletMap.current && tileLayerRef.current) {
       const tileUrl = isDarkMode
         ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-        : 'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png';
+        : 'https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}';
       tileLayerRef.current.setUrl(tileUrl);
 
       // Update attribution
-      const oldAttribution = isDarkMode ? '&copy; OpenStreetMap' : '&copy; CARTO';
-      const newAttribution = isDarkMode ? '&copy; CARTO' : '&copy; OpenStreetMap';
+      const oldAttribution = isDarkMode ? '&copy; Google Maps' : '&copy; CARTO';
+      const newAttribution = isDarkMode ? '&copy; CARTO' : '&copy; Google Maps';
       if (leafletMap.current.attributionControl) {
         leafletMap.current.attributionControl.removeAttribution(oldAttribution);
         leafletMap.current.attributionControl.addAttribution(newAttribution);

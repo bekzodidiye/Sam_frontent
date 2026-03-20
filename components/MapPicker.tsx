@@ -109,8 +109,8 @@ const MapPicker: React.FC<MapPickerProps> = ({ lat, lng, onChange, className, wo
         ref={setMapInstance}
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
+          attribution='&copy; Google Maps'
+          url="https://mt1.google.com/vt/lyrs=m&x={x}&y={y}&z={z}"
         />
         <LocationMarker lat={lat} lng={lng} onChange={onChange} workType={workType} radius={radius} />
       </MapContainer>
