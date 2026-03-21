@@ -104,55 +104,69 @@ const ArrivalChecker: React.FC = () => {
     const token = localStorage.getItem('paynet_auth_token');
     if (token) {
       try {
-        const userRes = await authService.getMe();
-        const usersRes = await userService.getUsers();
-        const checkInsRes = await checkInService.getCheckIns();
-        const salesRes = await saleService.getSales();
-        const messagesRes = await messageService.getMessages();
-        const rulesRes = await ruleService.getRules();
-        const targetsRes = await targetService.getTargets();
-        const reportsRes = await reportService.getReports();
-        const linksRes = await linkService.getSalesLinks();
-        const tariffsRes = await ruleService.getTariffs();
-        const settingsRes = await settingsService.getSettings();
-        const ratingsRes = await operatorRatingService.getRatings();
+        const [
+          userRes, usersRes, checkInsRes, salesRes, messagesRes,
+          rulesRes, targetsRes, reportsRes, linksRes, tariffsRes,
+          settingsRes, ratingsRes
+        ] = await Promise.all([
+          authService.getMe().catch(e => { console.error("Me fetch failed", e); return { data: null }; }),
+          userService.getUsers().catch(e => { console.error("Users fetch failed", e); return { data: [] }; }),
+          checkInService.getCheckIns().catch(e => { console.error("Checkins fetch failed", e); return { data: [] }; }),
+          saleService.getSales().catch(e => { console.error("Sales fetch failed", e); return { data: [] }; }),
+          messageService.getMessages().catch(e => { console.error("Messages fetch failed", e); return { data: [] }; }),
+          ruleService.getRules().catch(e => { console.error("Rules fetch failed", e); return { data: [] }; }),
+          targetService.getTargets().catch(e => { console.error("Targets fetch failed", e); return { data: [] }; }),
+          reportService.getReports().catch(e => { console.error("Reports fetch failed", e); return { data: [] }; }),
+          linkService.getSalesLinks().catch(e => { console.error("Links fetch failed", e); return { data: [] }; }),
+          ruleService.getTariffs().catch(e => { console.error("Tariffs fetch failed", e); return { data: [] }; }),
+          settingsService.getSettings().catch(e => { console.error("Settings fetch failed", e); return { data: null }; }),
+          operatorRatingService.getRatings().catch(e => { console.error("Ratings fetch failed", e); return { data: [] }; })
+        ]);
 
-        const tariffsData = Array.isArray(tariffsRes.data) ? tariffsRes.data : (tariffsRes.data.results || []);
-        const mappedTariffs = tariffsData.reduce((acc: any, t: any) => {
-          if (!acc[t.company]) acc[t.company] = [];
-          acc[t.company].push(t.name);
-          return acc;
-        }, { 'Ucell': [], 'Mobiuz': [], 'Beeline': [], 'Uztelecom': [] });
+        const tariffsRaw = tariffsRes?.data;
+        const tariffsData = Array.isArray(tariffsRaw) ? tariffsRaw : (tariffsRaw?.results || []);
+        
+        const mappedTariffs: Record<string, string[]> = { 'Ucell': [], 'Mobiuz': [], 'Beeline': [], 'Uztelecom': [] };
+        tariffsData.forEach((t: any) => {
+          if (t && t.company) {
+            // Find key case-insensitively but use defined keys
+            const key = Object.keys(mappedTariffs).find(k => k.toLowerCase() === t.company.toLowerCase());
+            if (key) {
+              mappedTariffs[key].push(t.name || "");
+            } else {
+              // Add new company if not in list
+              mappedTariffs[t.company] = [t.name || ""];
+            }
+          }
+        });
 
-        const settingsData = settingsRes.data;
+        const settingsData = settingsRes?.data;
         let finalSettings = null;
         if (Array.isArray(settingsData)) {
           finalSettings = settingsData[0] || null;
         } else if (settingsData && settingsData.results && Array.isArray(settingsData.results)) {
           finalSettings = settingsData.results[0] || null;
         } else {
-          finalSettings = settingsData;
+          finalSettings = settingsData || null;
         }
 
         setState(prev => ({
           ...prev,
-          currentUser: userRes.data,
-          users: Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data.results || []),
-          checkIns: Array.isArray(checkInsRes.data) ? checkInsRes.data : (checkInsRes.data.results || []),
-          sales: Array.isArray(salesRes.data) ? salesRes.data : (salesRes.data.results || []),
-          messages: Array.isArray(messagesRes.data) ? messagesRes.data : (messagesRes.data.results || []),
-          rules: Array.isArray(rulesRes.data) ? rulesRes.data : (rulesRes.data.results || []),
-          monthlyTargets: Array.isArray(targetsRes.data) ? targetsRes.data : (targetsRes.data.results || []),
-          reports: Array.isArray(reportsRes.data) ? reportsRes.data : (reportsRes.data.results || []),
-          salesLinks: Array.isArray(linksRes.data) ? linksRes.data : (linksRes.data.results || []),
+          currentUser: userRes?.data || prev.currentUser,
+          users: Array.isArray(usersRes?.data) ? usersRes.data : (usersRes?.data?.results || []),
+          checkIns: Array.isArray(checkInsRes?.data) ? checkInsRes.data : (checkInsRes?.data?.results || []),
+          sales: Array.isArray(salesRes?.data) ? salesRes.data : (salesRes?.data?.results || []),
+          messages: Array.isArray(messagesRes?.data) ? messagesRes.data : (messagesRes?.data?.results || []),
+          rules: Array.isArray(rulesRes?.data) ? rulesRes.data : (rulesRes?.data?.results || []),
+          monthlyTargets: Array.isArray(targetsRes?.data) ? targetsRes.data : (targetsRes?.data?.results || []),
+          reports: Array.isArray(reportsRes?.data) ? reportsRes.data : (reportsRes?.data?.results || []),
+          salesLinks: Array.isArray(linksRes?.data) ? linksRes.data : (linksRes?.data?.results || []),
           tariffs: mappedTariffs,
           globalSettings: finalSettings,
-          operatorRatings: Array.isArray(ratingsRes.data) ? ratingsRes.data : (ratingsRes.data.results || [])
+          operatorRatings: Array.isArray(ratingsRes?.data) ? ratingsRes.data : (ratingsRes?.data?.results || [])
         }));
       } catch (error) {
-        console.error("Failed to fetch data", error);
-        // Only remove token if it's an auth error (401/403)
-        // For now keep it simple
+        console.error("General error in fetchData", error);
       }
     }
   };

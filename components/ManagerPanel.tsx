@@ -806,17 +806,21 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     try {
       await ruleService.addTariff({ company, name: tariff });
       await refreshData();
+      showNotification(t(language, 'tarif_added_success'), 'success');
     } catch (err) {
-      console.error("Failed to add tariff", err);
+      console.error(err);
+      showNotification(t(language, 'update_error'), 'error');
     }
   };
 
   const handleRemoveTariff = async (company: string, tariff: string) => {
     try {
-      await ruleService.removeTariff({ company, name: tariff });
+      await ruleService.removeTariff({ company, tariff });
       await refreshData();
+      showNotification(t(language, 'tarif_deleted_success'), 'success');
     } catch (err) {
-      console.error("Failed to remove tariff", err);
+      console.error(err);
+      showNotification(t(language, 'update_error'), 'error');
     }
   };
 
@@ -5023,7 +5027,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     </button>
 
                     {isWorkPointOperatorDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl z-[110] overflow-hidden animate-in slide-in-from-top-2 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl z-[9999] overflow-hidden animate-in slide-in-from-top-2 duration-200 max-h-60 overflow-y-auto custom-scrollbar">
                         {operators.map(op => (
                           <button
                             key={op.id}
@@ -5078,7 +5082,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     </button>
 
                     {isWorkPointDepartmentDropdownOpen && (
-                      <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl z-[110] overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl z-[9999] overflow-hidden animate-in slide-in-from-top-2 duration-200">
                         {[
                           { id: 'office', name: t(language, 'office_label') },
                           { id: 'mobile', name: t(language, 'mobile_office_label') },

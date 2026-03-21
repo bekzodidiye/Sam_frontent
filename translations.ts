@@ -330,6 +330,8 @@ export const translations = {
     late_label: 'Kech qoldi',
     early_arrival_label: 'Erta keldi',
     rating_title: 'Reytingi',
+    tarif_added_success: 'Tarif muvaffaqiyatli qo\'shildi!',
+    tarif_deleted_success: 'Tarif muvaffaqiyatli o\'chirildi!',
   },
   ru: {
     overview: 'ОБЗОР',
@@ -662,6 +664,8 @@ export const translations = {
     late_label: 'Опоздал',
     early_arrival_label: 'Пришел раньше',
     rating_title: 'Рейтинг',
+    tarif_added_success: 'Тариф успешно добавлен!',
+    tarif_deleted_success: 'Тариф успешно удален!',
   },
   en: {
     overview: 'OVERVIEW',

@@ -102,8 +102,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
           password: authForm.password
         });
         localStorage.setItem('paynet_auth_token', loginRes.data.access);
-        const userRes = await authService.getMe();
-        setState(prev => ({ ...prev, currentUser: userRes.data }));
+        window.location.reload();
       } else {
         const signupRes = await authService.register({
           phone: authForm.phone.replace(/[^\d]/g, ''),

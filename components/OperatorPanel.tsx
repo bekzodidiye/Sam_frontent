@@ -1223,7 +1223,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 const saleDate = new Date(s.date);
                 saleDate.setHours(12, 0, 0, 0);
                 const inRange = saleDate >= startDate && saleDate <= endDate;
-                return s.userId === u.id && inRange;
+                return String(s.userId) === String(u.id) && inRange;
               });
             const sales = userSales.reduce((acc, s) => acc + s.count + s.bonus, 0);
             return { ...u, sales, historicalLeague };
@@ -2857,7 +2857,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
 
         return (
           <div className="space-y-6 animate-in fade-in duration-500">
-            <DateNavigation />
+
             <div className="w-full">
 
               {hasReported && (
@@ -3010,11 +3010,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                     <div className="flex justify-between items-center mb-4 sm:mb-6">
                       <div className="flex flex-col">
                         <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-tight">Savdo Paneli</h2>
-                        {monitoringDayOffset !== 0 && (
-                          <p className="text-[8px] font-bold text-brand-gold uppercase tracking-widest mt-0.5 flex items-center gap-1">
-                             <AlertTriangle className="w-3 h-3" /> Faqat bugun uchun sotuv qo'shish mumkin
-                          </p>
-                        )}
+
                       </div>
                       <button
                         onClick={() => setShowSaleForm(true)}
