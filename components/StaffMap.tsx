@@ -2,7 +2,7 @@ import React, { useMemo, useEffect, useRef } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Role, User, CheckIn, DailyReport } from '../types';
-import { Language } from '../translations';
+import { Language, t } from '../translations';
 import { isDateMatch, getLatenessStatus } from '../utils';
 
 const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: User[], today: string, onUserSelect: (userId: string) => void, selectedUserId?: string | null, isDarkMode: boolean, language: Language, className?: string }> = ({ checkIns, reports, users, today, onUserSelect, selectedUserId, isDarkMode, language, className }) => {
@@ -113,7 +113,7 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
           });
           L.marker([user.workLocation.lat, user.workLocation.lng], { icon: workIcon })
             .addTo(markersGroup.current!)
-            .bindPopup(`<b>${user.firstName} ${user.lastName}</b><br/>Ish joyi (Radius: ${radius}m)<br/>Turi: ${user.workType === 'office' ? 'Ofis' : user.workType === 'mobile' ? 'Mobil ofis' : user.workType === 'desk' ? 'Stolda' : 'Belgilanmagan'}`);
+            .bindPopup(`<b>${user.firstName} ${user.lastName}</b><br/>${t(language, 'work_location')} (${t(language, 'radius')}: ${radius}m)<br/>${t(language, 'type')}: ${user.workType === 'office' ? t(language, 'office_label') : user.workType === 'mobile' ? t(language, 'mobile_office_label') : user.workType === 'desk' ? t(language, 'desk') : t(language, 'not_specified')}`);
         }
         if (!lastKnownLocation?.location_lat || !lastKnownLocation?.location_lng) return;
         const lateness = todayCheckIn ? getLatenessStatus(todayCheckIn.timestamp, user.workingHours) : null;
@@ -153,8 +153,8 @@ const StaffMap: React.FC<{ checkIns: CheckIn[], reports: DailyReport[], users: U
           <div class="p-2">
             <div class="font-bold text-sm mb-1">${user.firstName} ${user.lastName}</div>
             <div class="text-xs text-gray-600">
-              ${todayCheckIn ? `Keldi: ${new Date(todayCheckIn.timestamp).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false })}` : 'Hali kelmadi'}
-              ${lateness ? `<br/><span class="${lateness.isLate ? 'text-red-500' : 'text-green-500'} font-bold">${lateness.isLate ? 'Kech qoldi' : 'Erta keldi'}: ${lateness.durationStr}</span>` : ''}
+              ${todayCheckIn ? `${t(language, 'checked_in_at')}: ${new Date(todayCheckIn.timestamp).toLocaleTimeString('uz-UZ', { hour: '2-digit', minute: '2-digit', hour12: false })}` : t(language, 'not_arrived_yet')}
+              ${lateness ? `<br/><span class="${lateness.isLate ? 'text-red-500' : 'text-green-500'} font-bold">${lateness.isLate ? t(language, 'late_label') : t(language, 'early_arrival_label')}: ${lateness.durationStr}</span>` : ''}
             </div>
           </div>
         `);

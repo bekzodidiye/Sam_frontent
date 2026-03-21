@@ -31,15 +31,27 @@ export interface UseWebSocketOptions {
 function getWsUrl(token: string | null): string {
   const envUrl = import.meta.env.VITE_WS_URL;
   if (envUrl) {
-    return `${envUrl}?token=${token}`;
+    // If it's a full URL, use it
+    if (envUrl.startsWith('ws://') || envUrl.startsWith('wss://')) {
+      return `${envUrl}${envUrl.includes('?') ? '&' : '?'}token=${token}`;
+    }
+    // If it's just a path or relative URL, try to prepend protocol/host
+    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+    return `${protocol}//${envUrl}/ws/notifications/?token=${token}`;
   }
 
+  // Fallback for local development if no env var
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const isLocalDev = window.location.hostname === 'localhost';
-  const host = isLocalDev
-    ? 'localhost:8000'
-    : window.location.host;
-  return `${protocol}//${host}/ws/notifications/?token=${token}`;
+  const hostname = window.location.hostname;
+  const isLocal = hostname === 'localhost' || hostname === '127.0.0.1';
+  
+  // Local often uses 8003 for Django
+  const host = isLocal ? `${hostname}:8003` : window.location.host;
+  
+  // Force insecure WS on localhost unless already on HTTPS
+  const finalProtocol = (isLocal && window.location.protocol !== 'https:') ? 'ws:' : protocol;
+  
+  return `${finalProtocol}//${host}/ws/notifications/?token=${token}`;
 }
 
 

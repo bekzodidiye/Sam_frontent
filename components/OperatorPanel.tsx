@@ -12,7 +12,7 @@ import CheckInMap from './CheckInMap';
 
 import { authService, userService, checkInService, saleService, messageService, ruleService, targetService } from '../api';
 
-const AchievementCard: React.FC<{ achievement: Achievement }> = ({ achievement }) => {
+const AchievementCard: React.FC<{ achievement: Achievement, language: Language }> = ({ achievement, language }) => {
   const [isFlipped, setIsFlipped] = useState(false);
 
   const getIcon = (type: string) => {
@@ -55,7 +55,7 @@ const AchievementCard: React.FC<{ achievement: Achievement }> = ({ achievement }
           </div>
           <div className="text-center space-y-1">
             <h3 className={`text-2xl font-black uppercase tracking-tight ${getTitleColor(achievement.type)}`}>{achievement.title}</h3>
-            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">Batafsil ko'rish</p>
+            <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest">{t(language, 'view_details')}</p>
           </div>
         </div>
 
@@ -226,7 +226,7 @@ const SingleLocationMap: React.FC<{
         <div className="absolute inset-0 bg-brand-gold/5 rounded-full scale-150 blur-xl opacity-30" />
         <MapPin className="w-10 h-10 text-brand-gold opacity-50 relative z-10 transition-transform group-hover:scale-110" />
       </div>
-      <p className="max-w-[180px] leading-[1.6]">Joylashuv ma'lumotlari topilmadi</p>
+      <p className="max-w-[180px] leading-[1.6]">{t(language, 'location_not_found')}</p>
     </div>
   );
 
@@ -243,7 +243,7 @@ const SingleLocationMap: React.FC<{
               ? 'bg-brand-black/95 border-white/10 text-brand-gold hover:text-brand-gold/80' 
               : 'bg-white border-blue-100 text-blue-500 hover:bg-blue-50 hover:text-blue-600'
           }`}
-          title="Google Maps'da ko'rish"
+          title={t(language, 'view_on_google_maps')}
         >
           <ExternalLink className="w-5 h-5" />
         </a>
@@ -259,7 +259,7 @@ const SingleLocationMap: React.FC<{
   );
 };
 
-const PhotoViewer: React.FC<{ photo: string; onClose: () => void }> = ({ photo, onClose }) => (
+const PhotoViewer: React.FC<{ photo: string; onClose: () => void; language: 'uz' | 'ru' | 'en' }> = ({ photo, onClose, language }) => (
   <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
     <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={onClose}></div>
     <div className="relative z-10 max-w-[95vw] max-h-[90vh] flex flex-col items-center justify-center animate-in zoom-in-95">
@@ -275,7 +275,7 @@ const PhotoViewer: React.FC<{ photo: string; onClose: () => void }> = ({ photo, 
         alt="Full view"
       />
       <div className="mt-4 bg-black/60 backdrop-blur-md text-white/90 text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full border border-white/10">
-        Yopish uchun ekranga bosing
+        {t(language, 'click_to_close')}
       </div>
     </div>
   </div>
@@ -401,9 +401,16 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     d.setDate(d.getDate() + monitoringDayOffset);
     return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
   }, [monitoringDayOffset]);
+
+  const activeDate = monitoringTargetDay;
+  const activeMonth = activeDate.substring(0, 7);
   const [selectedDay, setSelectedDay] = useState<string | null>(null);
   const [selectedTargetMonth, setSelectedTargetMonth] = useState(today.substring(0, 7));
   const [showMonthPicker, setShowMonthPicker] = useState(false);
+  useEffect(() => {
+    setSelectedTargetMonth(activeMonth);
+  }, [activeMonth]);
+
   const [selectedSalesPanelUrl, setSelectedSalesPanelUrl] = useState<string | null>(null);
   const [saleError, setSaleError] = useState<string | null>(null);
   const [locationError, setLocationError] = useState<string | null>(null);
@@ -441,7 +448,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        showNotification("Profil rasmi hajmi 10MB dan oshmasligi kerak!");
+        showNotification(t(language, 'image_size_error'));
         if (profilePhotoInputRef.current) profilePhotoInputRef.current.value = '';
         return;
       }
@@ -593,7 +600,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
           console.log("Permission state:", result.state);
           if (result.state === 'denied') {
             setIsLocating(false);
-            setLocationError("Joylashuvga ruxsat bloklangan! Iltimos, brauzer manzili (URL) yonidagi qulf (🔒) belgisini bosib, 'Joylashuv' (Location) ruxsatini yoqing va sahifani yangilang.");
+            setLocationError(t(language, 'location_blocked_error'));
           }
           result.onchange = () => {
             if (result.state === 'granted') refreshLocation();
@@ -639,9 +646,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
         if (err.code === 1) {
           msg = "Joylashuvga ruxsat berilmadi. Iltimos, brauzer manzili yonidagi qulf (🔒) belgisini bosib, ruxsat bering.";
         } else if (err.code === 2) {
-          msg = "Joylashuv ma'lumotlari aniqlanmadi. GPS yoqilganligini va internetni tekshiring.";
+          msg = t(language, 'location_not_determined_error');
         } else if (err.code === 3) {
-          msg = "Joylashuvni aniqlash vaqti tugadi. Qaytadan urinib ko'ring yoki sahifani yangilang.";
+          msg = t(language, 'location_timeout_error');
         }
 
         if (window.location.protocol !== 'https:' && window.location.hostname !== 'localhost') {
@@ -667,7 +674,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     const file = e.target.files?.[0];
     if (file) {
       if (file.size > 10 * 1024 * 1024) {
-        showNotification("Rasm hajmi 10MB dan oshmasligi kerak!");
+        showNotification(t(language, 'image_size_error'));
         if (fileInputRef.current) fileInputRef.current.value = '';
         return;
       }
@@ -755,7 +762,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     setCheckInConfirmData(null);
   };
 
-  const todaySales = useMemo(() => state.sales.filter(s => s.userId === user.id && s.date === today), [state.sales, user.id, today]);
+  const todaySales = useMemo(() => state.sales.filter(s => s.userId === user.id && s.date === activeDate), [state.sales, user.id, activeDate]);
 
   const dailySalesByOperator = useMemo(() => {
     const operatorSales: { [key: string]: number } = {
@@ -772,6 +779,54 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     });
     return operatorSales;
   }, [todaySales]);
+
+  const activeDateFormatted = useMemo(() => {
+    const d = new Date(activeDate);
+    const monthNames = translations[language].month_names;
+    return `${d.getDate()}-${monthNames[d.getMonth()]}`;
+  }, [activeDate, language]);
+
+  const DateNavigation = () => (
+    <div className="flex flex-col sm:flex-row items-center justify-between mb-8 bg-brand-dark p-6 rounded-[2.5rem] border border-white/10 shadow-lg gap-4">
+      <div className="flex flex-col text-center sm:text-left">
+        <h3 className="text-lg font-black text-white flex items-center justify-center sm:justify-start gap-2">
+           <Calendar className="w-5 h-5 text-brand-gold" />
+           {monitoringDayOffset === 0 ? t(language, 'today') : activeDate}
+        </h3>
+        <p className="text-[10px] font-bold text-white/30 uppercase tracking-widest">Sotuvlar va ma'lumotlarni ko'rish</p>
+      </div>
+      <div className="flex items-center gap-2 bg-brand-black p-1.5 rounded-2xl border border-white/10">
+        <button
+          onClick={() => { setSelectedDay(null); setMonitoringDayOffset(prev => prev - 1); }}
+          className="p-2 hover:bg-white/5 rounded-xl transition-all text-white/40 hover:text-brand-gold"
+        >
+          <ChevronLeft className="w-5 h-5" />
+        </button>
+        <div className="px-5 py-2.5 bg-brand-gold/10 rounded-xl border border-brand-gold/20 min-w-[120px] text-center">
+           <span className="text-xs font-black text-brand-gold uppercase tracking-tighter whitespace-nowrap">
+             {activeDateFormatted}
+           </span>
+        </div>
+        <button
+          onClick={() => { setSelectedDay(null); setMonitoringDayOffset(prev => prev + 1); }}
+          className="p-2 hover:bg-white/5 rounded-xl transition-all text-white/40 hover:text-brand-gold"
+        >
+          <ChevronRight className="w-5 h-5" />
+        </button>
+        {monitoringDayOffset !== 0 && (
+          <div className="flex items-center ml-2 border-l border-white/10 pl-2">
+            <button
+              onClick={handleResetChart}
+              className="p-2.5 bg-brand-gold/10 hover:bg-brand-gold/20 rounded-xl transition-all text-brand-gold flex items-center gap-2 shadow-sm"
+              title={t(language, 'back_to_today')}
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+      </div>
+    </div>
+  );
 
   const lateness = useMemo(() => {
     if (!userCheckIn) return null;
@@ -806,8 +861,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
     <div className="max-w-2xl mx-auto py-6 sm:py-12 px-3 sm:px-4">
       <div className="bg-brand-dark rounded-[2rem] sm:rounded-[3.5rem] shadow-2xl overflow-hidden border border-white/10 animate-in zoom-in-95 duration-500">
         <div className="p-8 sm:p-12 text-center border-b border-white/10 bg-gradient-to-br from-brand-gold/10 to-brand-gold/5">
-          <h2 className="text-2xl sm:text-3xl font-black text-brand-gold tracking-tight uppercase">{isEditingCheckIn ? "Ma'lumotlarni yangilash" : "Xush kelibsiz!"}</h2>
-          <p className="text-white/40 mt-2 sm:mt-3 font-medium text-xs sm:text-base">Ishni boshlash uchun rasm va manzilingizni yuboring.</p>
+          <h2 className="text-2xl sm:text-3xl font-black text-brand-gold tracking-tight uppercase">{isEditingCheckIn ? t(language, 'update_info') : t(language, 'welcome')}</h2>
+          <p className="text-white/40 mt-2 sm:mt-3 font-medium text-xs sm:text-base">{t(language, 'start_work_desc')}</p>
         </div>
         <div className="p-6 sm:p-10 space-y-6 sm:space-y-8">
           <div onClick={() => fileInputRef.current?.click()} className="aspect-video bg-white/5 rounded-[1.5rem] sm:rounded-[2.5rem] overflow-hidden relative border-2 sm:border-4 border-dashed border-white/10 flex items-center justify-center cursor-pointer hover:border-brand-gold/30 transition-all">
@@ -882,7 +937,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
               disabled={!location || isLocating || !capturedPhoto}
               className="flex-1 py-4 sm:py-6 gold-gradient text-brand-black rounded-xl sm:rounded-[2rem] font-black uppercase tracking-widest text-[10px] sm:text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 disabled:opacity-50 transition-all"
             >
-              {isEditingCheckIn ? "Saqlash" : "Ishni boshlash"}
+              {isEditingCheckIn ? t(language, 'save') : t(language, 'start_work')}
             </button>
             {(isEditingCheckIn || (!hasCheckedIn && showCheckInUI)) && (
               <button
@@ -892,7 +947,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 }}
                 className="px-6 sm:px-10 py-4 sm:py-6 bg-white/5 border border-white/10 text-white/40 rounded-xl sm:rounded-[2rem] font-black uppercase tracking-widest text-[10px] sm:text-xs hover:bg-white/10 transition-all"
               >
-                Bekor qilish
+                {t(language, 'cancel')}
               </button>
             )}
           </div>
@@ -1186,7 +1241,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                     <span>Reyting</span>
                   </div>
                   <h2 className="text-4xl font-extrabold text-white tracking-tight">
-                    Operatorlar <span className="text-brand-gold">Reytingi</span>
+                    {t(language, 'operators')} <span className="text-brand-gold">{t(language, 'rating_title')}</span>
                   </h2>
                 </div>
 
@@ -1194,17 +1249,17 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 <div className="flex flex-col gap-3 w-full md:w-auto">
                   <div className="flex items-center justify-center md:justify-start gap-2 bg-brand-black p-1.5 rounded-2xl border border-white/10 overflow-x-auto">
                     {[
-                      { id: 'today', label: 'Bugun' },
-                      { id: 'week', label: 'Hafta' },
-                      { id: 'month', label: 'Oy' },
-                      { id: 'custom', label: 'Oraliq' }
-                    ].map(t => (
+                      { id: 'today', label: t(language, 'today_filter') },
+                      { id: 'week', label: t(language, 'week_filter') },
+                      { id: 'month', label: t(language, 'month_filter') },
+                      { id: 'custom', label: t(language, 'custom_filter') }
+                    ].map(item => (
                       <button
-                        key={t.id}
-                        onClick={() => setRatingTimeframe(t.id as any)}
-                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${ratingTimeframe === t.id ? 'bg-brand-gold text-brand-black shadow-md' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                        key={item.id}
+                        onClick={() => setRatingTimeframe(item.id as any)}
+                        className={`px-4 py-2 rounded-xl text-xs font-bold uppercase tracking-wider whitespace-nowrap transition-all ${ratingTimeframe === item.id ? 'bg-brand-gold text-brand-black shadow-md' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
                       >
-                        {t.label}
+                        {item.label}
                       </button>
                     ))}
                   </div>
@@ -1284,11 +1339,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                             <Trophy className={`w-5 h-5 ${leagueInfo.color}`} />
                             <span className={`text-sm font-black uppercase tracking-[0.2em] ${leagueInfo.color}`}>{leagueInfo.title}</span>
                           </div>
-                          <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{groupUsers.length} ta operator</span>
+                          <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{groupUsers.length} {t(language, 'operator_count_suffix')}</span>
                         </div>
                         <div className="divide-y divide-white/5 flex-1 overflow-y-auto">
                           {groupUsers.length === 0 ? (
-                            <div className="p-8 text-center text-white/20 text-xs font-bold uppercase tracking-widest">Operatorlar yo'q</div>
+                            <div className="p-8 text-center text-white/20 text-xs font-bold uppercase tracking-widest">{t(language, 'no_operators')}</div>
                           ) : groupUsers.map((u, idx) => {
                             return (
                               <div key={u.id} className={`px-6 py-5 flex items-center justify-between hover:bg-white/5 transition-colors group ${u.id === user.id ? 'bg-brand-gold/5' : ''}`}>
@@ -1302,13 +1357,13 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                       {u.nickname || `${u.firstName} ${u.lastName}`}
                                       {u.id === user.id && <span className="text-[8px] bg-brand-gold text-brand-black px-2 py-0.5 rounded-full uppercase tracking-tighter">Siz</span>}
                                     </p>
-                                    <p className="text-[9px] font-medium text-white/40">{u.nickname ? `${u.firstName} ${u.lastName}` : (u.department || 'Bo\'limsiz')}</p>
+                                    <p className="text-[9px] font-medium text-white/40">{u.nickname ? `${u.firstName} ${u.lastName}` : (u.department || t(language, 'without_department'))}</p>
                                   </div>
                                 </div>
                                 <div className="flex items-center gap-4">
                                   <div className="text-right min-w-[50px]">
                                     <p className="text-base font-black text-white">{u.sales}</p>
-                                    <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">Sotuv</p>
+                                    <p className="text-[8px] font-black text-white/40 uppercase tracking-widest">{t(language, 'sales_count')}</p>
                                   </div>
                                 </div>
                               </div>
@@ -1341,11 +1396,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
         
         return (
           <div className="space-y-6 sm:space-y-10 animate-in fade-in slide-in-from-bottom-5 duration-700">
-            {viewingPhoto && <PhotoViewer photo={viewingPhoto} onClose={() => setViewingPhoto(null)} />}
+            {viewingPhoto && <PhotoViewer photo={viewingPhoto} language={language} onClose={() => setViewingPhoto(null)} />}
             <div className="flex-1 overflow-y-auto p-4 md:p-8 space-y-8 custom-scrollbar no-scrollbar bg-brand-black">
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
                 <RefinedStatCard
-                  label={t(language, 'today')}
+                  label={monitoringDayOffset === 0 ? t(language, 'today') : monitoringTargetDay}
                   value={getUserSalesCount(selectedUser.id, 'today')}
                   icon={<Clock />}
                   color="bg-blue-500"
@@ -1386,7 +1441,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         <div className="flex flex-col gap-1">
                           <h3 className="text-lg font-black text-white flex items-center gap-2">
                             <BarChart2 className="w-5 h-5 text-brand-gold" />
-                            Sotuvlar Dinamikasi ({chartTitleLabel})
+                            {t(language, 'sales_dynamics')} ({chartTitleLabel})
                           </h3>
                           <div className="flex flex-wrap gap-2 pl-0 sm:pl-7">
                             {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
@@ -1408,6 +1463,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         <div className="flex items-center justify-between sm:justify-start gap-1 bg-brand-black p-1 rounded-xl border border-white/10 shadow-inner w-full sm:w-auto mt-2 sm:mt-0">
                           <button
                             onClick={() => {
+                              setSelectedDay(null);
                               if (chartTimeframe === 'day') setMonitoringDayOffset(prev => prev - 1);
                               else if (chartTimeframe === 'week') setWeekOffset(prev => prev - 1);
                               else if (chartTimeframe === 'month') setMonthOffset(prev => prev - 1);
@@ -1422,6 +1478,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                           </span>
                           <button
                             onClick={() => {
+                              setSelectedDay(null);
                               if (chartTimeframe === 'day') setMonitoringDayOffset(prev => prev + 1);
                               else if (chartTimeframe === 'week') setWeekOffset(prev => prev + 1);
                               else if (chartTimeframe === 'month') setMonthOffset(prev => prev + 1);
@@ -1564,14 +1621,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                 if (chartTimeframe === 'year') return `${selectedYear} ${t(language, 'yearly_sales_title')}`;
                                 if (chartTimeframe === 'month') return `${chartTitleLabel} ${t(language, 'monthly_sales_title')}`;
                                 if (chartTimeframe === 'week') return `${chartTitleLabel} ${t(language, 'weekly_sales_title')}`;
-                                return `${today} ${t(language, 'daily_sales_title')}`;
+                                return `${monitoringTargetDay} ${t(language, 'daily_sales_title')}`;
                               })()}
                             </h3>
                           </div>
                           
                           <div className="flex flex-wrap items-center gap-3 pl-0 lg:pl-10">
                             {(() => {
-                              const targetDate = selectedDay || (chartTimeframe === 'day' ? monitoringTargetDay : today);
+                              const targetDate = selectedDay || monitoringTargetDay;
                               let daySales = [];
                               if (selectedDay) {
                                 if (chartTimeframe === 'year') {
@@ -1667,10 +1724,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                 sDate.setHours(0,0,0,0);
                                 return s.userId === selectedUser.id && sDate >= targetMonday && sDate <= targetSunday;
                               });
-                            } else if (chartTimeframe === 'day') {
-                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === monitoringTargetDay);
                             } else {
-                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
+                              daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === monitoringTargetDay);
                             }
 
                             if (daySales.length === 0) {
@@ -1753,10 +1808,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                             sDate.setHours(0,0,0,0);
                             return s.userId === selectedUser.id && sDate >= targetMonday && sDate <= targetSunday;
                           });
-                        } else if (chartTimeframe === 'day') {
-                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === monitoringTargetDay);
                         } else {
-                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === today);
+                          daySales = state.sales.filter(s => s.userId === selectedUser.id && s.date === monitoringTargetDay);
                         }
 
                         if (daySales.length === 0) {
@@ -1828,15 +1881,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                 if (chartTimeframe === 'year') {
                                     const d = new Date(selectedDay);
                                     const monthName = translations[language].month_names[d.getMonth()];
-                                    return `${monthName} ${d.getFullYear()} Hisobotlari`;
+                                    return `${monthName} ${d.getFullYear()} ${t(language, 'reports_suffix')}`;
                                 }
-                                return `${selectedDay} Hisoboti`;
+                                return `${selectedDay} ${t(language, 'report_of')}`;
                             }
-                            if (chartTimeframe === 'year') return `${selectedYear} Yillik Hisobotlari`;
-                            if (chartTimeframe === 'month') return `${chartTitleLabel} Oylik Hisobotlari`;
-                            if (chartTimeframe === 'week') return `${chartTitleLabel} Haftalik Hisobotlari`;
-                            if (chartTimeframe === 'day') return `${monitoringTargetDay} Kunlik Hisoboti`;
-                            return `${today} Kunlik Hisoboti`;
+                            if (chartTimeframe === 'year') return `${selectedYear} ${t(language, 'yearly_reports')}`;
+                            if (chartTimeframe === 'month') return `${chartTitleLabel} ${t(language, 'monthly_reports')}`;
+                            if (chartTimeframe === 'week') return `${chartTitleLabel} ${t(language, 'weekly_reports')}`;
+                            return `${monitoringTargetDay} ${t(language, 'daily_report_title')}`;
                           })()}
                         </h3>
                       </div>
@@ -1874,10 +1926,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                             rDate.setHours(0,0,0,0);
                             return r.userId === selectedUser.id && rDate >= targetMonday && rDate <= targetSunday;
                           });
-                        } else if (chartTimeframe === 'day') {
-                          timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date === monitoringTargetDay);
                         } else {
-                          timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date === today);
+                          timeframeReports = state.reports.filter(r => r.userId === selectedUser.id && r.date === monitoringTargetDay);
                         }
 
                         if (timeframeReports.length === 0) {
@@ -1886,7 +1936,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                               <div className="w-14 h-14 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                 <AlertTriangle className="w-8 h-8" />
                               </div>
-                              <p className="text-sm font-black text-white/20 italic">Bu davr uchun hisobotlar yuborilmagan</p>
+                              <p className="text-sm font-black text-white/20 italic">{t(language, 'no_reports_period')}</p>
                             </div>
                           );
                         }
@@ -1951,9 +2001,9 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 <div className="space-y-8">
                   <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm focus:outline-none">
                     <h3 className="p-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 flex items-center justify-between">
-                      <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-brand-gold" /> {selectedDay || today} DAVOMAT</div>
+                      <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-brand-gold" /> {selectedDay || monitoringTargetDay} DAVOMAT</div>
                       {(() => {
-                        const date = selectedDay || today;
+                        const date = selectedDay || monitoringTargetDay;
                         const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
                         const workingHoursStr = typeof ci?.workingHours === 'string' ? ci.workingHours : (typeof selectedUser.workingHours === 'string' ? selectedUser.workingHours : null);
                         return workingHoursStr ? <span className="bg-brand-black px-2 py-1 rounded-md text-white/50 border border-white/10">{workingHoursStr.replace(/\s*(AM|PM)/gi, '')}</span> : null;
@@ -1961,7 +2011,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                     </h3>
                     <div className="p-6 space-y-4">
                       {(() => {
-                        const date = selectedDay || today;
+                        const date = selectedDay || monitoringTargetDay;
                         const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
                         const co = state.reports.find(r => r.userId === selectedUser.id && r.date === date);
                         const workingHours = ci?.workingHours || selectedUser.workingHours;
@@ -2096,10 +2146,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
 
                   <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
                     <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI FOTO' : 'OXIRGI FOTO'}
+                      <ImageIcon className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI FOTO' : (monitoringDayOffset === 0 ? 'OXIRGI FOTO' : 'KUNDAGI FOTO')}
                     </h3>
                     {(() => {
-                      const targetDate = selectedDay || today;
+                      const targetDate = selectedDay || monitoringTargetDay;
                       const dayCi = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, targetDate));
                       return dayCi ? (
                         <div
@@ -2122,11 +2172,11 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                   </div>
 
                   <div className={`${isDarkMode ? 'bg-brand-dark border-white/10' : 'bg-white border-blue-100 shadow-[0_4px_20px_-4px_rgba(59,130,246,0.1)]'} rounded-[2rem] border p-6 transition-all duration-300`}>
-                    <h3 className={`text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2 ${isDarkMode ? 'text-white/30' : 'text-slate-400'}`}>
-                      <MapPin className={`w-4 h-4 ${isDarkMode ? 'text-brand-gold' : 'text-blue-500'}`} /> {selectedDay ? 'KUNDAGI JOYLAHUV' : 'OXIRGI JOYLAHUV'}
+                    <h3 className="text-[10px] font-black uppercase tracking-widest mb-4 flex items-center gap-2 {isDarkMode ? 'text-white/30' : 'text-slate-400'}">
+                      <MapPin className={`w-4 h-4 ${isDarkMode ? 'text-brand-gold' : 'text-blue-500'}`} /> {selectedDay ? 'KUNDAGI JOYLAHUV' : (monitoringDayOffset === 0 ? 'OXIRGI JOYLAHUV' : 'KUNDAGI JOYLAHUV')}
                     </h3>
                     {(() => {
-                      const targetDate = selectedDay || today;
+                      const targetDate = selectedDay || monitoringTargetDay;
                       const dayCi = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, targetDate));
                       const dayReport = state.reports.find(r => r.userId === selectedUser.id && r.date === targetDate);
 
@@ -2138,8 +2188,8 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         ? { lat: dayReport.locationLat, lng: dayReport.locationLng }
                         : null;
 
-                      // Fallback to absolute last location if today is empty
-                      if (!startLoc && !endLoc && !selectedDay) {
+                      // Fallback to absolute last location only if looking at today
+                      if (!startLoc && !endLoc && !selectedDay && monitoringDayOffset === 0) {
                         const sortedCis = [...state.checkIns]
                           .filter(c => c.userId === selectedUser.id && c.location_lat && c.location_lng)
                           .sort((a, b) => b.timestamp.localeCompare(a.timestamp));
@@ -2167,7 +2217,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                   </div>
 
                   {(() => {
-                    const targetDate = selectedDay || today;
+                    const targetDate = selectedDay || monitoringTargetDay;
                     const rating = state.operatorRatings?.find(r => r.operatorId === user.id && r.date === targetDate);
                     if (!rating) return null;
                     return (
@@ -2299,13 +2349,13 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       }}
                       className="flex-1 bg-indigo-600 text-white py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:bg-indigo-700 transition-all"
                     >
-                      Saqlash
+                      {t(language, 'save')}
                     </button>
                     <button
                       onClick={() => setShowSimEntryForm(false)}
                       className="px-10 py-5 bg-brand-black border border-white/10 text-white/40 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/5 transition-all"
                     >
-                      Bekor qilish
+                      {t(language, 'cancel')}
                     </button>
                   </div>
                 </div>
@@ -2391,7 +2441,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       <Smartphone className="w-10 h-10 relative z-10" />
                     </div>
                     <div className="space-y-2">
-                       <h3 className="text-2xl font-black text-white uppercase tracking-tight">Tez Orada</h3>
+                       <h3 className="text-2xl font-black text-white uppercase tracking-tight">{t(language, 'coming_soon')}</h3>
                        <p className="text-white/40 font-bold uppercase tracking-widest text-[10px] leading-relaxed max-w-[240px]">
                           Simkarta so'rov tizimi tez orada ishga tushadi. Iltimos kuting.
                        </p>
@@ -2400,7 +2450,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                        onClick={() => setIsSimRequestModalOpen(false)}
                        className="w-full py-4 bg-white/5 hover:bg-white/10 text-white/60 rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] border border-white/5 transition-all"
                     >
-                       Tushunarli
+                       {t(language, 'understood')}
                     </button>
                   </div>
                 </div>
@@ -2417,7 +2467,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
               <div className="absolute inset-0 bg-brand-gold/5 rounded-[2.5rem] scale-150 blur-xl opacity-30" />
               <Send className="w-10 h-10 relative z-10" />
             </div>
-            <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 text-center">Tez Orada</h2>
+            <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 text-center">{t(language, 'coming_soon')}</h2>
             <p className="text-white/40 font-bold uppercase tracking-[0.3em] text-[10px] text-center max-w-[280px] leading-loose">
               Xabarlar bo'limi ustida ish olib borilmoqda. Tez orada foydalanishga topshiriladi.
             </p>
@@ -2564,7 +2614,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 <div className="text-center md:text-left space-y-3 flex-1 min-w-0 w-full pr-0 md:pr-40">
                   <div className="w-full min-w-0 overflow-hidden">
                     <h2 className="text-3xl sm:text-4xl font-black text-white tracking-tight truncate w-full">{user.firstName} {user.lastName}</h2>
-                    <p className="text-brand-gold font-bold uppercase tracking-widest text-xs mt-1">{user.role}</p>
+                    <p className="text-brand-gold font-bold uppercase tracking-widest text-xs mt-1">{t(language, (user.role || '').toLowerCase() as any)}</p>
                   </div>
 
                   <div className="flex flex-wrap justify-center md:justify-start gap-3">
@@ -2634,7 +2684,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
               {user.achievements && user.achievements.length > 0 ? (
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
                   {user.achievements.map(achievement => (
-                    <AchievementCard key={achievement.id} achievement={achievement} />
+                    <AchievementCard key={achievement.id} achievement={achievement} language={language} />
                   ))}
                 </div>
               ) : (
@@ -2703,7 +2753,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         value={profileForm.phone}
                         onChange={e => setProfileForm({ ...profileForm, phone: formatPhoneNumber(e.target.value) })}
                         className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
-                        placeholder="Telefon"
+                        placeholder={t(language, 'phone')}
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -2713,7 +2763,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         value={profileForm.nickname}
                         onChange={e => setProfileForm({ ...profileForm, nickname: e.target.value })}
                         className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
-                        placeholder="Usernameni kiriting"
+                        placeholder={t(language, 'enter_username')}
                       />
                     </div>
                     <div className="space-y-1.5">
@@ -2753,7 +2803,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                       }}
                       className="w-full py-5 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-xs shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all mt-6"
                     >
-                      Saqlash
+                      {t(language, 'save')}
                     </button>
                   </div>
                 </div>
@@ -2763,8 +2813,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
         );
       }
       default: {
-        const today = getTodayStr();
-        const targetMonth = today.substring(0, 7);
+        const todayMonth = today.substring(0, 7);
         const monthlyTarget = state.monthlyTargets.find(t => t.month === targetMonth);
         const userSales = state.sales.filter(s => s.userId === user.id);
         const totalTarget = monthlyTarget ? Object.values(monthlyTarget.targets).reduce((sum: number, t: any) => sum + Number(t), 0) : 0;
@@ -2808,6 +2857,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
 
         return (
           <div className="space-y-6 animate-in fade-in duration-500">
+            <DateNavigation />
             <div className="w-full">
 
               {hasReported && (
@@ -2958,7 +3008,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                   {/* Savdo Paneli */}
                   <div className="bg-brand-dark rounded-[2rem] sm:rounded-[3rem] shadow-xl border border-white/10 p-6 sm:p-8 animate-in fade-in duration-500 h-full flex flex-col">
                     <div className="flex justify-between items-center mb-4 sm:mb-6">
-                      <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-tight">Savdo Paneli</h2>
+                      <div className="flex flex-col">
+                        <h2 className="text-base sm:text-lg font-black text-white uppercase tracking-tight">Savdo Paneli</h2>
+                        {monitoringDayOffset !== 0 && (
+                          <p className="text-[8px] font-bold text-brand-gold uppercase tracking-widest mt-0.5 flex items-center gap-1">
+                             <AlertTriangle className="w-3 h-3" /> Faqat bugun uchun sotuv qo'shish mumkin
+                          </p>
+                        )}
+                      </div>
                       <button
                         onClick={() => setShowSaleForm(true)}
                         className="px-4 sm:px-5 py-2 sm:py-2.5 gold-gradient text-brand-black font-black rounded-lg shadow-sm hover:scale-105 transition-all duration-200 flex items-center gap-2 text-[8px] sm:text-[10px] uppercase tracking-widest"
@@ -3085,7 +3142,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                 onClick={() => setOpenDropdown(openDropdown === 'tariff' ? null : 'tariff')}
                                 className={`w-full p-4 pr-10 border border-white/10 rounded-2xl bg-brand-dark text-sm font-bold outline-none focus:border-brand-gold transition text-left flex items-center justify-between ${newSale.tariff ? 'text-white' : 'text-white/40'}`}
                               >
-                                <span>{newSale.tariff || 'Tarifni tanlang'}</span>
+                                <span>{newSale.tariff || t(language, 'select_tariff')}</span>
                                 <ChevronDown className={`w-5 h-5 text-white/40 transition-transform ${openDropdown === 'tariff' ? 'rotate-180' : ''}`} />
                               </button>
 
@@ -3138,7 +3195,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                               type="number"
                               min="0"
                               step="1"
-                              placeholder="0 ta"
+                              placeholder={t(language, 'zero_items')}
                               className={`w-full p-4 border rounded-2xl bg-brand-dark text-sm font-bold outline-none transition text-white ${Number(newSale.bonus) > Number(newSale.count) ? 'border-red-500/50 focus:border-red-500' : 'border-white/10 focus:border-brand-gold'}`}
                               value={newSale.bonus}
                               onChange={e => {
@@ -3183,10 +3240,10 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                                   effectiveInventory += (originalSale.count + originalSale.bonus);
                                 }
                               }
-                              return effectiveInventory < (count + bonus) ? 'Omborda yetarli emas' : 'Saqlash';
+                              return effectiveInventory < (count + bonus) ? t(language, 'not_enough_stock') : t(language, 'save');
                             })()}
                           </button>
-                          <button type="button" onClick={() => { setShowSaleForm(false); setEditingSaleId(null); setNewSale({ company: 'Ucell', tariff: '', count: '1', bonus: '0' }); }} className="px-10 py-5 bg-white border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-widest text-[10px]">Bekor qilish</button>
+                          <button type="button" onClick={() => { setShowSaleForm(false); setEditingSaleId(null); setNewSale({ company: 'Ucell', tariff: '', count: '1', bonus: '0' }); }} className="px-10 py-5 bg-white border border-gray-200 text-gray-400 rounded-2xl font-black uppercase tracking-widest text-[10px]">{t(language, 'cancel')}</button>
                         </div>
                       </form>
                     )}
@@ -3253,7 +3310,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 <div className="xl:col-span-1 flex flex-col">
                   {/* Bugungi davomat */}
                   <div className="bg-brand-dark p-6 sm:p-8 rounded-[2rem] sm:rounded-[3rem] shadow-xl border border-white/10 relative overflow-hidden animate-in fade-in duration-700">
-                    <h2 className="font-black text-white/40 text-[8px] sm:text-[9px] uppercase tracking-widest mb-4 sm:mb-6 flex items-center gap-2"><History className="w-4 h-4 text-brand-gold" /> BUGUNGI DAVOMAT</h2>
+                    <h2 className="font-black text-white/40 text-[8px] sm:text-[9px] uppercase tracking-widest mb-4 sm:mb-6 flex items-center gap-2"><History className="w-4 h-4 text-brand-gold" /> {t(language, 'todays_attendance')}</h2>
 
                     <div className="space-y-4 sm:space-y-5">
                       {hasReported ? (() => {
@@ -3420,7 +3477,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                         );
                       })() : (
                         <div className="p-6 rounded-2xl sm:rounded-[2rem] border border-white/10 bg-white/5 text-white/40 italic text-center text-xs sm:text-sm">
-                          Kelish ma'lumotlari topilmadi
+                          {t(language, 'no_checkin_found')}
                         </div>
                       )}
 
@@ -3457,7 +3514,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 </div>
                 <div>
                   <h3 className="text-xl font-black text-white tracking-tight">{hasReported ? 'Hisobotni tahrirlash' : t(language, 'end_day_report')}</h3>
-                  <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mt-1">Kun yakuni ma'lumotlarini kiriting</p>
+                  <p className="text-[10px] font-bold text-white/40 uppercase tracking-widest mt-1">{t(language, 'end_day_info_hint')}</p>
                 </div>
               </div>
               <button onClick={() => setIsEndDayModalOpen(false)} className="p-2 bg-white/5 hover:bg-white/10 rounded-xl transition text-white/30 hover:text-white">
@@ -3508,7 +3565,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 <h4 className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">IZOH / COMMENT</h4>
                 <textarea
                   className="w-full p-6 bg-brand-black border border-white/10 rounded-[2rem] text-sm font-medium text-white focus:border-brand-gold outline-none transition shadow-inner h-32 resize-none overflow-y-auto"
-                  placeholder="Bugungi ish bo'yicha hisobotingizga izoh qoldiring..."
+                  placeholder={t(language, 'daily_report_placeholder')}
                   value={reportText}
                   onChange={e => setReportText(e.target.value)}
                 />
@@ -3563,7 +3620,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 onClick={() => setIsEndDayModalOpen(false)}
                 className="flex-1 py-5 bg-white/5 text-white/40 border border-white/10 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all"
               >
-                Bekor qilish
+                {t(language, 'cancel')}
               </button>
               <button
                 disabled={!reportText.trim() || reportPhotos.length === 0 || isLocating || (distanceToWorkPoint !== null && distanceToWorkPoint > (user.workRadius || 300))}
@@ -3589,7 +3646,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 }}
                 className="flex-[2] py-5 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg hover:scale-[1.02] active:scale-95 transition-all disabled:opacity-50 disabled:grayscale disabled:hover:scale-100"
               >
-                {hasReported ? "Saqlash" : "Ishni yakunlash"}
+                {hasReported ? t(language, 'save') : t(language, 'end_work')}
               </button>
             </div>
           </div>
@@ -3604,7 +3661,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
               <Trash2 className="w-6 h-6 sm:w-8 sm:h-8" />
             </div>
             <h3 className="text-lg sm:text-xl font-black text-white text-center uppercase tracking-tight mb-2">
-              Rasmni o'chirish
+              {t(language, 'delete_photo')}
             </h3>
             <p className="text-white/60 text-xs sm:text-sm text-center mb-6 sm:mb-8">
               Haqiqatan ham ushbu rasmni hisobotdan o'chirmoqchimisiz?
@@ -3614,7 +3671,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 onClick={() => setDeletingReportPhotoIndex(null)}
                 className="py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white/60 font-black uppercase tracking-widest text-[9px] sm:text-[10px] rounded-xl sm:rounded-2xl transition-all border border-white/10"
               >
-                Bekor qilish
+                {t(language, 'cancel')}
               </button>
               <button
                 onClick={() => {
@@ -3654,7 +3711,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
                 onClick={() => setIsCheckInConfirmOpen(false)}
                 className="flex-1 py-4 rounded-2xl font-black text-white/60 uppercase tracking-widest hover:bg-white/5 transition border border-white/10"
               >
-                Bekor qilish
+                {t(language, 'cancel')}
               </button>
               <button
                 onClick={executeCheckIn}
@@ -3678,7 +3735,7 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
               Joylashuvni saqlash
             </h3>
             <p className="text-white/60 text-sm mb-8">
-              Hozirgi joylashuvingizni yangi ish joyi sifatida saqlaysizmi?
+              {t(language, 'save_current_location_as_work')}
             </p>
             <div className="flex gap-4">
               <button
@@ -3715,14 +3772,14 @@ const OperatorPanel: React.FC<OperatorPanelProps> = ({ user, state, setState, ac
             <div className="w-14 h-14 sm:w-16 sm:h-16 bg-red-500/10 rounded-2xl flex items-center justify-center mx-auto mb-4 sm:mb-6 text-red-500 border border-red-500/20 shadow-lg shadow-red-500/10">
               <Trash2 className="w-6 h-6 sm:w-8 sm:h-8" />
             </div>
-            <h3 className="text-lg sm:text-xl font-black text-white text-center mb-2 uppercase tracking-tight">O'chirishni tasdiqlang</h3>
+            <h3 className="text-lg sm:text-xl font-black text-white text-center mb-2 uppercase tracking-tight">{t(language, 'confirm_delete_title')}</h3>
             <p className="text-white/50 text-center text-[11px] sm:text-sm mb-6 sm:mb-8 font-medium leading-relaxed">Haqiqatan ham bu sotuvni o'chirmoqchimisiz? Bu amalni ortga qaytarib bo'lmaydi.</p>
             <div className="grid grid-cols-2 gap-3 sm:gap-4">
               <button
                 onClick={() => setDeletingSaleId(null)}
                 className="py-3.5 sm:py-4 bg-white/5 hover:bg-white/10 text-white font-black uppercase tracking-widest text-[9px] sm:text-[10px] rounded-xl sm:rounded-2xl transition-all border border-white/5"
               >
-                Bekor qilish
+                {t(language, 'cancel')}
               </button>
               <button
                 onClick={() => {

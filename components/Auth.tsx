@@ -46,7 +46,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
     return `+${phoneNumber.slice(0, 3)} ${phoneNumber.slice(3, 5)} ${phoneNumber.slice(5, 8)} ${phoneNumber.slice(8, 10)} ${phoneNumber.slice(10, 12)}`;
   };
 
-  const nameRegex = /^[A-Z][a-z]*$/;
+  const nameRegex = /^[A-ZА-ЯЁ][a-zа-яёA-ZА-ЯЁ\s'-]*$/;
 
   const validateForm = () => {
     const errors: Record<string, boolean> = {};
@@ -55,24 +55,24 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
     if (isLogin) {
       if (!authForm.nickname || authForm.nickname.length < 6) {
         errors.nickname = true;
-        firstErrorMsg = firstErrorMsg || "Login kamida 6 ta belgidan iborat bo'lishi kerak";
+        firstErrorMsg = firstErrorMsg || t(language, 'login_min_length');
       }
       if (!authForm.password || authForm.password.length < 6) {
         errors.password = true;
         firstErrorMsg = firstErrorMsg || "Parol kamida 6 ta belgidan iborat bo'lishi kerak";
       }
     } else {
-      if (!authForm.firstName || !nameRegex.test(authForm.firstName)) {
+      if (!authForm.firstName?.trim() || !nameRegex.test(authForm.firstName.trim())) {
         errors.firstName = true;
-        firstErrorMsg = firstErrorMsg || "Ism katta harf bilan boshlanishi va faqat harflardan iborat bo'lishi kerak";
+        firstErrorMsg = firstErrorMsg || t(language, 'name_format_error');
       }
-      if (!authForm.lastName || !nameRegex.test(authForm.lastName)) {
+      if (!authForm.lastName?.trim() || !nameRegex.test(authForm.lastName.trim())) {
         errors.lastName = true;
-        firstErrorMsg = firstErrorMsg || "Familiya katta harf bilan boshlanishi va faqat harflardan iborat bo'lishi kerak";
+        firstErrorMsg = firstErrorMsg || t(language, 'surname_format_error');
       }
       if (!authForm.nickname || authForm.nickname.length < 6) {
         errors.nickname = true;
-        firstErrorMsg = firstErrorMsg || "Nickname kamida 6 ta belgidan iborat bo'lishi kerak";
+        firstErrorMsg = firstErrorMsg || t(language, 'login_min_length');
       }
       if (!authForm.password || authForm.password.length < 6) {
         errors.password = true;
@@ -80,7 +80,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
       }
       if (authForm.phone.replace(/[^\d]/g, '').length !== 12) {
         errors.phone = true;
-        firstErrorMsg = firstErrorMsg || "Telefon raqami noto'g'ri kiritilgan";
+        firstErrorMsg = firstErrorMsg || t(language, 'phone_format_error');
       }
     }
 
@@ -113,13 +113,42 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
           last_name: authForm.lastName,
           role: authForm.role
         });
-        setError("Ro'yxatdan o'tish muvaffaqiyatli! Endi login orqali kiring.");
+        setError(t(language, 'signup_success'));
         setIsSuccess(true);
         setIsLogin(true);
       }
     } catch (err: any) {
       console.error("Auth error", err);
-      setError(err.response?.data?.detail || err.response?.data?.phone?.[0] || t(language, 'auth_error'));
+      const serverErr = err.response?.data;
+      let displayError = t(language, isLogin ? 'login_failed' : 'auth_error');
+
+      if (serverErr) {
+        if (typeof serverErr === 'string') {
+          displayError = serverErr;
+        } else {
+          // Identify first field error from backend response (e.g., username, phone)
+          const fields = Object.keys(serverErr);
+          if (fields.length > 0) {
+            const firstField = fields[0];
+            const firstVal = serverErr[firstField];
+            const rawMsg = Array.isArray(firstVal) ? firstVal[0] : String(firstVal);
+            
+            if (rawMsg && rawMsg !== 'undefined' && rawMsg !== '[object Object]') {
+               const lowerMsg = rawMsg.toLowerCase();
+               if (lowerMsg.includes('phone') && (lowerMsg.includes('exists') || lowerMsg.includes('raqam'))) {
+                 displayError = t(language, 'phone_exists_error');
+               } else if (lowerMsg.includes('already exists') || lowerMsg.includes('already taken') || lowerMsg.includes('band')) {
+                 displayError = t(language, 'nickname_exists_error');
+               } else {
+                 displayError = rawMsg;
+               }
+            } else if (serverErr.detail) {
+               displayError = serverErr.detail;
+            }
+          }
+        }
+      }
+      setError(displayError);
       setIsSuccess(false);
     }
   };
@@ -191,7 +220,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
                     required
                     className={`peer w-full px-5 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder-transparent focus:outline-none transition-all ${fieldErrors.firstName ? 'border-red-500' : 'border-white/10 focus:border-brand-gold'}`}
                     value={authForm.firstName}
-                    placeholder="Ism"
+                    placeholder={t(language, 'first_name')}
                     onKeyDown={(e) => handleKeyDown(e, 'lastName')}
                     onChange={e => {
                         const val = e.target.value;
@@ -199,7 +228,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
                         setAuthForm({ ...authForm, firstName: formatted });
                     }}
                   />
-                  <label className="absolute left-5 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-[10px] peer-focus:text-brand-gold">Ism</label>
+                  <label className="absolute left-5 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-[10px] peer-focus:text-brand-gold">{t(language, 'first_name')}</label>
                 </div>
                 <div className="relative">
                   <input
@@ -208,7 +237,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
                     required
                     className={`peer w-full px-5 py-4 bg-white/5 border rounded-2xl text-sm font-bold text-white placeholder-transparent focus:outline-none transition-all ${fieldErrors.lastName ? 'border-red-500' : 'border-white/10 focus:border-brand-gold'}`}
                     value={authForm.lastName}
-                    placeholder="Familiya"
+                    placeholder={t(language, 'last_name')}
                     onKeyDown={(e) => handleKeyDown(e, 'nickname')}
                     onChange={e => {
                         const val = e.target.value;
@@ -216,7 +245,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
                         setAuthForm({ ...authForm, lastName: formatted });
                     }}
                   />
-                  <label className="absolute left-5 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-[10px] peer-focus:text-brand-gold">Familiya</label>
+                  <label className="absolute left-5 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest transition-all peer-placeholder-shown:text-sm peer-placeholder-shown:top-4 peer-focus:-top-2.5 peer-focus:text-[10px] peer-focus:text-brand-gold">{t(language, 'last_name')}</label>
                 </div>
               </div>
             )}
@@ -250,7 +279,7 @@ const Auth: React.FC<AuthProps> = ({ state, setState, language, setLanguage }) =
                   onKeyDown={(e) => handleKeyDown(e, 'password')}
                   onChange={e => setAuthForm({ ...authForm, phone: formatPhoneNumber(e.target.value) })}
                 />
-                <label className="absolute left-10 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest">Telefon raqam</label>
+                <label className="absolute left-10 -top-2.5 bg-brand-dark/80 px-1 text-[10px] font-black text-white/40 uppercase tracking-widest">{t(language, 'phone_number')}</label>
               </div>
             )}
 

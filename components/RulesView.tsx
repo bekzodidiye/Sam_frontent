@@ -41,7 +41,7 @@ const RulesView: React.FC<RulesViewProps> = ({ state, language }) => {
             ))
         ) : (
           <div className="text-center py-12 bg-black/5 dark:bg-white/5 rounded-2xl border border-black/10 dark:border-white/10 border-dashed">
-            <p className="text-sm font-bold theme-text-muted uppercase tracking-wider">Hozircha qoidalar kiritilmagan</p>
+            <p className="text-sm font-bold theme-text-muted uppercase tracking-wider">{t(language, 'no_rules')}</p>
           </div>
         )}
       </div>

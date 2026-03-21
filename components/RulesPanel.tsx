@@ -33,14 +33,14 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
           ...prev,
           rules: prev.rules.map(rule => rule.id === editingId ? response.data : rule)
         }));
-        showNotification("Muvaffaqiyatli saqlandi", 'success');
+        showNotification(t(language, 'success'), 'success');
       } else {
         const response = await ruleService.createRule({ content: currentContent });
         setState((prev: AppState) => ({
           ...prev,
           rules: [response.data, ...prev.rules]
         }));
-        showNotification("Muvaffaqiyatli qo'shildi", 'success');
+        showNotification(t(language, 'success'), 'success');
       }
       setIsAdding(false);
       setEditingId(null);
@@ -76,7 +76,7 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
         rules: prev.rules.filter(rule => rule.id !== deletingRuleId)
       }));
       setDeletingRuleId(null);
-      showNotification("O'chirildi", 'success');
+      showNotification(t(language, 'success'), 'success');
     } catch (error) {
       console.error('Error deleting rule:', error);
       showNotification("Xatolik yuz berdi. Qaytadan urinib ko'ring.");
@@ -87,7 +87,7 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
 
   const config = useMemo(() => ({
     readonly: false,
-    placeholder: 'Qoidalarni boying...',
+    placeholder: t(language, 'write_rules_placeholder'),
     height: 400,
     theme: 'dark',
     toolbarSticky: false,
@@ -107,14 +107,14 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
         <div className="flex items-center justify-between mb-2">
           <div>
             <h2 className="text-3xl font-black text-white uppercase tracking-tight">{t(language, 'rules')}</h2>
-            <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mt-2">Menejer boshqaruv paneli</p>
+            <p className="text-[10px] font-bold text-white/30 uppercase tracking-[0.2em] mt-2">{t(language, 'rules_panel_subtitle')}</p>
           </div>
           {!isAdding && !editingId && (
             <button
               onClick={() => { setIsAdding(true); setContent(''); }}
               className="px-8 py-4 bg-brand-gold text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-105 active:scale-95 transition-all shadow-lg flex items-center gap-3"
             >
-              <Plus className="w-4 h-4" /> YANGI QOIDA
+              <Plus className="w-4 h-4" /> {t(language, 'add_new_rule')}
             </button>
           )}
         </div>
@@ -123,7 +123,7 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
           <div className="theme-blue-box p-8 rounded-[2.5rem] border border-white/10 shadow-2xl space-y-6 animate-in zoom-in-95 duration-300">
             <div className="flex items-center justify-between">
               <h3 className="text-xl font-black text-white uppercase tracking-tight">
-                {editingId ? "Tahrirlash" : "Yangi qo'shish"}
+                {editingId ? t(language, 'edit') : t(language, 'add_rule')}
               </h3>
               <button onClick={cancelEdit} className="p-2 hover:bg-white/5 rounded-full transition"><X className="w-5 h-5 text-white/40" /></button>
             </div>
@@ -150,7 +150,7 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
                 className="px-10 py-4 bg-brand-gold text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] hover:scale-105 active:scale-95 transition-all shadow-lg shadow-brand-gold/20 disabled:opacity-50 disabled:hover:scale-100 flex items-center gap-3"
               >
                 <Save className="w-4 h-4" />
-                {isSubmitting ? 'Saqlanmoqda...' : 'Saqlash'}
+                {isSubmitting ? t(language, 'saving') : t(language, 'save')}
               </button>
             </div>
           </div>
@@ -188,7 +188,7 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
           ) : (
             <div className="py-20 text-center bg-white/5 rounded-[3rem] border-2 border-dashed border-white/5">
               <div className="w-16 h-16 bg-white/5 rounded-full flex items-center justify-center mx-auto mb-6 text-2xl opacity-20">📋</div>
-              <p className="text-white/20 font-black uppercase tracking-widest text-[10px]">Qoidalar mavjud emas</p>
+              <p className="text-white/20 font-black uppercase tracking-widest text-[10px]">{t(language, 'no_rules_found')}</p>
             </div>
           )}
         </div>
@@ -200,8 +200,8 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
              <div className="w-16 h-16 bg-red-500/10 rounded-2xl flex items-center justify-center text-red-500 mx-auto mb-6 border border-red-500/20">
                 <Trash2 className="w-8 h-8" />
              </div>
-            <h3 className="text-xl font-black text-white text-center uppercase tracking-tight mb-2">O'chirishni tasdiqlang</h3>
-            <p className="text-white/40 text-center text-sm font-medium mb-8 leading-relaxed">Ushbu qoida butunlay o'chiriladi. Bu amalni qaytarib bo'lmaydi.</p>
+            <h3 className="text-xl font-black text-white text-center uppercase tracking-tight mb-2">{t(language, 'confirm_delete_title')}</h3>
+            <p className="text-white/40 text-center text-sm font-medium mb-8 leading-relaxed">{t(language, 'confirm_delete_rule_desc')}</p>
             <div className="flex gap-4">
               <button 
                 onClick={() => setDeletingRuleId(null)} 
@@ -214,7 +214,7 @@ const RulesPanel: React.FC<RulesPanelProps> = ({ state, setState, language, show
                 disabled={isSubmitting}
                 className="flex-1 py-4 bg-red-500 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl shadow-lg shadow-red-500/20 hover:scale-105 active:scale-95 transition-all disabled:opacity-50"
               >
-                O'chirish
+                {t(language, 'delete')}
               </button>
             </div>
           </div>

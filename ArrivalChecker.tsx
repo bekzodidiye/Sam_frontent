@@ -8,10 +8,10 @@ import RulesView from './components/RulesView';
 import { AppState, Role, User, CheckIn, SimSale, DailyReport, Message, MonthlyTarget } from './types';
 import { getTodayStr, isDateMatch } from './utils';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Crown, Sun, Moon, Globe, Hash, RotateCcw, X, ChevronRight, ChevronLeft } from 'lucide-react';
+import { Crown, Sun, Moon, Globe, Hash, RotateCcw, X, ChevronRight, ChevronLeft, LayoutDashboard, Users, TrendingUp, Trophy, FileText, Smartphone, MessageSquare, Briefcase, ClipboardList, UserCheck, Settings, Home, User as LucideUser } from 'lucide-react';
 import { t, Language } from './translations';
 import { authService, userService, checkInService, saleService, messageService, ruleService, targetService, reportService, linkService, settingsService, operatorRatingService } from './api';
-import { Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, Navigate, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { useWebSocket } from './hooks/useWebSocket';
 import { AlertTriangle, CheckCircle2 } from 'lucide-react';
 
@@ -27,9 +27,49 @@ const RT_EVENTS = [
   'USER_ACTIVITY'
 ];
 
+const VALID_LANGS: Language[] = ['uz', 'ru', 'en'];
+
 const ArrivalChecker: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
+  const { lang: urlLang } = useParams();
+
+  // Sync language with URL
+  const [language, setLanguageState] = useState<Language>(() => {
+    if (urlLang && VALID_LANGS.includes(urlLang as Language)) return urlLang as Language;
+    const saved = localStorage.getItem('paynet_app_language');
+    return (saved as Language) || 'uz';
+  });
+
+  const setLanguage = useCallback((newLang: Language) => {
+    setLanguageState(newLang);
+    localStorage.setItem('paynet_app_language', newLang);
+    
+    // Update URL prefix
+    const pathParts = location.pathname.split('/');
+    if (VALID_LANGS.includes(pathParts[1] as Language)) {
+      pathParts[1] = newLang;
+    } else if (pathParts[1] === '') {
+      pathParts[1] = newLang;
+    } else {
+      pathParts.splice(1, 0, newLang);
+    }
+    navigate(pathParts.join('/') + location.search, { replace: true });
+  }, [location.pathname, location.search, navigate]);
+
+  useEffect(() => {
+    if (urlLang && VALID_LANGS.includes(urlLang as Language) && urlLang !== language) {
+      setLanguageState(urlLang as Language);
+    }
+    
+    // Auto-redirect if urlLang is missing from URL or invalid
+    const pathParts = location.pathname.split('/');
+    const firstSegment = pathParts[1];
+    if (firstSegment && !VALID_LANGS.includes(firstSegment as any)) {
+        setLanguage(language);
+    }
+  }, [urlLang, language, location.pathname, setLanguage]);
+
   const [state, setState] = useState<AppState>({
     currentUser: null,
     users: [],
@@ -77,26 +117,37 @@ const ArrivalChecker: React.FC = () => {
         const settingsRes = await settingsService.getSettings();
         const ratingsRes = await operatorRatingService.getRatings();
 
-        const mappedTariffs = tariffsRes.data.reduce((acc: any, t: any) => {
+        const tariffsData = Array.isArray(tariffsRes.data) ? tariffsRes.data : (tariffsRes.data.results || []);
+        const mappedTariffs = tariffsData.reduce((acc: any, t: any) => {
           if (!acc[t.company]) acc[t.company] = [];
           acc[t.company].push(t.name);
           return acc;
         }, { 'Ucell': [], 'Mobiuz': [], 'Beeline': [], 'Uztelecom': [] });
 
+        const settingsData = settingsRes.data;
+        let finalSettings = null;
+        if (Array.isArray(settingsData)) {
+          finalSettings = settingsData[0] || null;
+        } else if (settingsData && settingsData.results && Array.isArray(settingsData.results)) {
+          finalSettings = settingsData.results[0] || null;
+        } else {
+          finalSettings = settingsData;
+        }
+
         setState(prev => ({
           ...prev,
           currentUser: userRes.data,
-          users: usersRes.data,
-          checkIns: checkInsRes.data,
-          sales: salesRes.data,
-          messages: messagesRes.data,
-          rules: rulesRes.data,
-          monthlyTargets: targetsRes.data,
-          reports: reportsRes.data,
-          salesLinks: Array.isArray(linksRes.data) ? linksRes.data : [],
+          users: Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data.results || []),
+          checkIns: Array.isArray(checkInsRes.data) ? checkInsRes.data : (checkInsRes.data.results || []),
+          sales: Array.isArray(salesRes.data) ? salesRes.data : (salesRes.data.results || []),
+          messages: Array.isArray(messagesRes.data) ? messagesRes.data : (messagesRes.data.results || []),
+          rules: Array.isArray(rulesRes.data) ? rulesRes.data : (rulesRes.data.results || []),
+          monthlyTargets: Array.isArray(targetsRes.data) ? targetsRes.data : (targetsRes.data.results || []),
+          reports: Array.isArray(reportsRes.data) ? reportsRes.data : (reportsRes.data.results || []),
+          salesLinks: Array.isArray(linksRes.data) ? linksRes.data : (linksRes.data.results || []),
           tariffs: mappedTariffs,
-          globalSettings: settingsRes.data,
-          operatorRatings: Array.isArray(ratingsRes.data) ? ratingsRes.data : []
+          globalSettings: finalSettings,
+          operatorRatings: Array.isArray(ratingsRes.data) ? ratingsRes.data : (ratingsRes.data.results || [])
         }));
       } catch (error) {
         console.error("Failed to fetch data", error);
@@ -116,13 +167,15 @@ const ArrivalChecker: React.FC = () => {
 
   useEffect(() => {
     if (!isLoading) {
-      if (!state.currentUser && location.pathname !== '/login') {
-        navigate('/login', { replace: true });
-      } else if (state.currentUser && location.pathname === '/login') {
-        navigate('/', { replace: true });
+      const isLoginPath = VALID_LANGS.some(l => location.pathname === `/${l}/login`) || location.pathname === '/login';
+      if (!state.currentUser && !isLoginPath) {
+        navigate(`/${language}/login`, { replace: true });
+      } else if (state.currentUser && isLoginPath) {
+        const dest = state.currentUser.role === Role.MANAGER ? 'manager/overview' : 'operator/home';
+        navigate(`/${language}/${dest}`, { replace: true });
       }
     }
-  }, [state.currentUser, location.pathname, isLoading, navigate]);
+  }, [state.currentUser, location.pathname, isLoading, navigate, language, VALID_LANGS]);
 
   // Track path for debugging but don't force reload
   const prevPathRef = useRef(location.pathname);
@@ -143,10 +196,6 @@ const ArrivalChecker: React.FC = () => {
     return saved === 'true';
   });
 
-  const [language, setLanguage] = useState<Language>(() => {
-    const saved = localStorage.getItem('paynet_app_language');
-    return (saved as Language) || 'uz';
-  });
 
   const [unreadBadges, setUnreadBadges] = useState(() => {
     const saved = localStorage.getItem('unread_badges');
@@ -619,10 +668,10 @@ const ArrivalChecker: React.FC = () => {
 
   return (
     <Routes>
-      <Route path="/login" element={
+      <Route path="/:lang/login" element={
         <Auth state={state} setState={setState} language={language} setLanguage={setLanguage} />
       } />
-      <Route path="/*" element={
+      <Route path="/:lang/*" element={
         state.currentUser ? (
           !state.currentUser.isApproved ? (
             <div className="min-h-screen flex items-center justify-center bg-brand-black p-4">
@@ -637,27 +686,20 @@ const ArrivalChecker: React.FC = () => {
             <div className={`min-h-screen bg-brand-black font-sans text-white flex flex-col lg:flex-row ${isDarkMode ? 'dark' : ''}`}>
               {/* Mobile Header */}
               <header className="lg:hidden h-16 bg-brand-black/80 backdrop-blur-md border-b border-white/10 flex items-center justify-between px-4 sticky top-0 z-40">
-                <div className="flex items-center gap-2">
-                  <div className="w-8 h-8 bg-brand-black border border-brand-gold/50 rounded-lg flex items-center justify-center text-brand-gold shadow-lg">
-                    <Crown className="w-4 h-4" />
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-brand-gold text-brand-black rounded-xl flex flex-col items-center justify-center font-black shadow-lg">
+                    <Crown className="w-5 h-5 mb-0.5" />
                   </div>
                   <div className="flex flex-col">
-                    <h1 className="text-sm font-black tracking-tighter gold-text-gradient leading-none uppercase">{t(language, 'brand_name')}</h1>
+                    <h1 className="text-lg font-black tracking-tighter gold-text-gradient leading-none uppercase">{t(language, 'brand_name')}</h1>
                   </div>
                 </div>
-
-                <div className="flex items-center gap-2">
-
-                  <button
-                    onClick={() => setIsMobileMenuOpen(true)}
-                    className="p-2 text-white/40 hover:text-brand-gold transition-colors"
-                  >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="3" y1="12" x2="21" y2="12"></line><line x1="3" y1="6" x2="21" y2="6"></line><line x1="3" y1="18" x2="21" y2="18"></line></svg>
-                  </button>
-                </div>
+                <button onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)} className="p-2 text-white/60 hover:text-white transition-colors">
+                  {isMobileMenuOpen ? <X className="w-6 h-6" /> : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="4" x2="20" y1="12" y2="12" /><line x1="4" x2="20" y1="6" y2="6" /><line x1="4" x2="20" y1="18" y2="18" /></svg>}
+                </button>
               </header>
 
-              {/* Mobile Sidebar Overlay */}
+              {/* Mobile Menu Backdrop */}
               <AnimatePresence>
                 {isMobileMenuOpen && (
                   <>
@@ -666,126 +708,78 @@ const ArrivalChecker: React.FC = () => {
                       animate={{ opacity: 1 }}
                       exit={{ opacity: 0 }}
                       onClick={() => setIsMobileMenuOpen(false)}
-                      className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] lg:hidden"
+                      className="fixed inset-0 bg-brand-black/60 backdrop-blur-sm z-[45] lg:hidden"
                     />
                     <motion.aside
                       initial={{ x: '-100%' }}
                       animate={{ x: 0 }}
                       exit={{ x: '-100%' }}
                       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                      className="fixed inset-y-0 left-0 w-72 bg-brand-dark z-[70] flex flex-col lg:hidden border-r border-white/10"
+                      className="fixed left-0 top-0 bottom-0 w-80 bg-brand-dark border-r border-white/10 z-[50] lg:hidden flex flex-col shadow-2xl"
                     >
                       <div className="p-6 border-b border-white/10 flex items-center justify-between">
                         <div className="flex items-center gap-3">
-                          <div className="w-10 h-10 bg-brand-black border border-brand-gold/50 rounded-xl flex items-center justify-center text-brand-gold shadow-xl">
-                            <Crown className="w-5 h-5" />
+                          <div className="w-10 h-10 bg-brand-gold text-brand-black rounded-xl flex flex-col items-center justify-center font-black">
+                            <Crown className="w-5 h-5 mb-0.5" />
                           </div>
-                          <div className="flex flex-col">
-                            <h1 className="text-lg font-black tracking-tighter gold-text-gradient leading-none uppercase">{t(language, 'brand_name')}</h1>
-                          </div>
+                          <h1 className="text-xl font-black gold-text-gradient uppercase">{t(language, 'brand_name')}</h1>
                         </div>
                         <button onClick={() => setIsMobileMenuOpen(false)} className="p-2 text-white/20 hover:text-white transition-colors">
-                          <X className="w-6 h-6" />
+                          <X className="w-5 h-5" />
                         </button>
                       </div>
 
-                      <div className="p-4 border-b border-white/10">
-                        <div className="flex items-center justify-between bg-white/5 p-1.5 rounded-xl border border-white/10">
-                          <button
-                            onClick={() => setIsDarkMode(!isDarkMode)}
-                            className="flex-1 p-2 flex justify-center text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5"
-                          >
-                            {isDarkMode ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-                          </button>
-                          <div className="w-px h-4 bg-white/10"></div>
-                          <div className="relative group flex-1">
-                            <button className="w-full flex justify-center items-center gap-1.5 p-2 text-white/40 hover:text-brand-gold transition-colors rounded-lg hover:bg-white/5">
-                              <img src={language === 'uz' ? flagUz : language === 'ru' ? flagRu : flagEn} alt={language} className="w-3.5 h-3.5 rounded-full object-cover" />
-                              <span className="text-[10px] font-black uppercase tracking-widest">{t(language, language === 'uz' ? 'uzbek' : language === 'ru' ? 'russian' : 'english')}</span>
-                            </button>
-                            <div className="absolute top-full left-0 mt-2 w-48 bg-brand-dark border border-white/10 rounded-xl shadow-2xl opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all z-50 overflow-hidden">
-                              <button onClick={() => { setLanguage('uz'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors flex items-center gap-3 ${language === 'uz' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
-                                <img src={flagUz} alt="UZ" className="w-5 h-5 rounded-full object-cover" />
-                                {t(language, 'uzbek')}
-                              </button>
-                              <button onClick={() => { setLanguage('ru'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'ru' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
-                                <img src={flagRu} alt="RU" className="w-5 h-5 rounded-full object-cover" />
-                                {t(language, 'russian')}
-                              </button>
-                              <button onClick={() => { setLanguage('en'); setIsMobileMenuOpen(false); }} className={`w-full text-left px-4 py-3 text-[10px] font-black uppercase tracking-widest transition-colors border-t border-white/5 flex items-center gap-3 ${language === 'en' ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}>
-                                <img src={flagEn} alt="EN" className="w-5 h-5 rounded-full object-cover" />
-                                {t(language, 'english')}
-                              </button>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar">
+                      <div className="flex-1 overflow-y-auto p-4 space-y-2">
                         {state.currentUser.role === Role.MANAGER ? (
                           [
-                            { id: 'overview', path: '/manager/overview', label: t(language, 'overview'), icon: '📊' },
-                            { id: 'users', path: '/manager/users', label: t(language, 'employees'), icon: '👥' },
-                            { id: 'monitoring', path: '/manager/monitoring', label: t(language, 'monitoring'), icon: '📈' },
-                            { id: 'rating', path: '/manager/rating', label: t(language, 'rating'), icon: '🏆' },
-                            { id: 'reports', path: '/manager/reports', label: t(language, 'reports'), icon: '📝' },
-                            { id: 'simcards', path: '/manager/inventory', label: t(language, 'inventory_plan'), icon: '📱', count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
-                            { id: 'messages', path: '/manager/messages', label: t(language, 'messages'), icon: '💬', count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
-                            { id: 'sales_panel', path: '/manager/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
-                            { id: 'rules', path: '/manager/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
-                            { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: unreadBadges.approvals > 0 ? unreadBadges.approvals : undefined }
+                            { id: 'overview', path: `/${language}/manager/overview`, label: t(language, 'overview'), icon: <LayoutDashboard className="w-5 h-5" /> },
+                            { id: 'users', path: `/${language}/manager/users`, label: t(language, 'employees'), icon: <Users className="w-5 h-5" /> },
+                            { id: 'monitoring', path: `/${language}/manager/monitoring`, label: t(language, 'monitoring'), icon: <TrendingUp className="w-5 h-5" /> },
+                            { id: 'rating', path: `/${language}/manager/rating`, label: t(language, 'rating'), icon: <Trophy className="w-5 h-5" /> },
+                            { id: 'reports', path: `/${language}/manager/reports`, label: t(language, 'reports'), icon: <FileText className="w-5 h-5" /> },
+                            { id: 'simcards', path: `/${language}/manager/inventory`, label: t(language, 'inventory_plan'), icon: <Smartphone className="w-5 h-5" /> },
+                            { id: 'messages', path: `/${language}/manager/messages`, label: t(language, 'messages'), icon: <MessageSquare className="w-5 h-5" />, count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
+                            { id: 'sales_panel', path: `/${language}/manager/sales`, label: t(language, 'sales_panel'), icon: <Briefcase className="w-5 h-5" /> },
+                            { id: 'rules', path: `/${language}/manager/rules`, label: t(language, 'rules'), icon: <ClipboardList className="w-5 h-5" /> },
+                            { id: 'approvals', path: `/${language}/manager/approvals`, label: t(language, 'approvals'), icon: <UserCheck className="w-5 h-5" />, count: unreadBadges.approvals > 0 ? unreadBadges.approvals : undefined },
+                            { id: 'settings', path: `/${language}/manager/settings`, label: t(language, 'settings'), icon: <Settings className="w-5 h-5" /> }
                           ].map(tab => (
                             <button
                               key={tab.id}
-                              onClick={() => {
-                                navigate(tab.path);
-                                setIsMobileMenuOpen(false);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                              }}
-                              className={`w-full relative flex items-center justify-between px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${(location.pathname === tab.path)
-                                ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
-                                }`}
+                              onClick={() => { navigate(tab.path); setIsMobileMenuOpen(false); }}
+                              className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all ${location.pathname === tab.path ? 'bg-brand-gold text-brand-black font-black' : 'text-white/40 hover:bg-white/5 hover:text-white font-bold'}`}
                             >
-                              <div className="flex items-center gap-3">
-                                <span className="text-lg">{tab.icon}</span>
-                                <span>{tab.label}</span>
+                              <div className="flex items-center gap-4">
+                                {tab.icon}
+                                <span className="uppercase tracking-widest text-[10px]">{tab.label}</span>
                               </div>
-                              {tab.count ? (
-                                <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.count}</span>
-                              ) : null}
+                              {tab.count !== undefined && (
+                                <span className={`px-2 py-1 rounded-lg text-[10px] font-black ${location.pathname === tab.path ? 'bg-brand-black text-brand-gold' : 'bg-brand-gold text-brand-black'}`}>
+                                  {tab.count}
+                                </span>
+                              )}
                             </button>
                           ))
                         ) : (
                           [
-                            { id: 'checkin', path: '/operator/home', label: t(language, 'home'), icon: '🏠' },
-                            { id: 'simcards', path: '/operator/inventory', label: t(language, 'inventory'), icon: '📱', count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
-                            { id: 'monitoring', path: '/operator/monitoring', label: t(language, 'monitoring'), icon: '📈' },
-                            { id: 'rating', path: '/operator/rating', label: t(language, 'rating'), icon: '🏆' },
-                            { id: 'messages', path: '/operator/messages', label: t(language, 'messages'), icon: '💬' },
-                            { id: 'rules', path: '/operator/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
-                            { id: 'sales_panel', path: '/operator/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
-                            { id: 'profile', path: '/operator/profile', label: t(language, 'profile'), icon: '👤' }
+                            { id: 'checkin', path: `/${language}/operator/home`, label: t(language, 'home'), icon: <Home className="w-5 h-5" /> },
+                            { id: 'simcards', path: `/${language}/operator/inventory`, label: t(language, 'inventory'), icon: <Smartphone className="w-5 h-5" /> },
+                            { id: 'monitoring', path: `/${language}/operator/monitoring`, label: t(language, 'monitoring'), icon: <TrendingUp className="w-5 h-5" /> },
+                            { id: 'rating', path: `/${language}/operator/rating`, label: t(language, 'rating'), icon: <Trophy className="w-5 h-5" /> },
+                            { id: 'messages', path: `/${language}/operator/messages`, label: t(language, 'messages'), icon: <MessageSquare className="w-5 h-5" /> },
+                            { id: 'rules', path: `/${language}/operator/rules`, label: t(language, 'rules'), icon: <ClipboardList className="w-5 h-5" /> },
+                            { id: 'sales_panel', path: `/${language}/operator/sales`, label: t(language, 'sales_panel'), icon: <Briefcase className="w-5 h-5" /> },
+                            { id: 'profile', path: `/${language}/operator/profile`, label: t(language, 'profile'), icon: <LucideUser className="w-5 h-5" /> }
                           ].map(tab => (
                             <button
                               key={tab.id}
-                              onClick={() => {
-                                navigate(tab.path);
-                                setIsMobileMenuOpen(false);
-                                window.scrollTo({ top: 0, behavior: 'smooth' });
-                              }}
-                              className={`w-full relative flex items-center justify-between px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${(location.pathname === tab.path)
-                                ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20'
-                                : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
-                                }`}
+                              onClick={() => { navigate(tab.path); setIsMobileMenuOpen(false); }}
+                              className={`w-full flex items-center justify-between p-4 rounded-2xl transition-all ${location.pathname === tab.path ? 'bg-brand-gold text-brand-black font-black' : 'text-white/40 hover:bg-white/5 hover:text-white font-bold'}`}
                             >
-                              <div className="flex items-center gap-3">
-                                <span className="text-lg">{tab.icon}</span>
-                                <span>{tab.label}</span>
+                              <div className="flex items-center gap-4">
+                                {tab.icon}
+                                <span className="uppercase tracking-widest text-[10px]">{tab.label}</span>
                               </div>
-                              {tab.count ? (
-                                <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.count}</span>
-                              ) : null}
                             </button>
                           ))
                         )}
@@ -877,271 +871,117 @@ const ArrivalChecker: React.FC = () => {
                 <div className={`flex-1 overflow-y-auto py-6 px-4 space-y-2 custom-scrollbar ${isSidebarCollapsed ? 'px-2' : ''}`}>
                   {state.currentUser.role === Role.MANAGER ? (
                     [
-                      { id: 'overview', path: '/manager/overview', label: t(language, 'overview'), icon: '📊' },
-                      { id: 'users', path: '/manager/users', label: t(language, 'employees'), icon: '👥' },
-                      { id: 'monitoring', path: '/manager/monitoring', label: t(language, 'monitoring'), icon: '📈' },
-                      { id: 'rating', path: '/manager/rating', label: t(language, 'rating'), icon: '🏆' },
-                      { id: 'reports', path: '/manager/reports', label: t(language, 'reports'), icon: '📝' },
-                      { id: 'simcards', path: '/manager/inventory', label: t(language, 'inventory_plan'), icon: '📱', count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
-                      { id: 'messages', path: '/manager/messages', label: t(language, 'messages'), icon: '💬', count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
-                      { id: 'sales_panel', path: '/manager/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
-                      { id: 'rules', path: '/manager/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
-                      { id: 'approvals', path: '/manager/approvals', label: t(language, 'approvals'), icon: '✅', count: unreadBadges.approvals > 0 ? unreadBadges.approvals : undefined },
-                      { id: 'settings', path: '/manager/settings', label: t(language, 'settings'), icon: '⚙️' }
+                      { id: 'overview', path: `/${language}/manager/overview`, label: t(language, 'overview'), icon: <LayoutDashboard className="w-5 h-5" /> },
+                      { id: 'users', path: `/${language}/manager/users`, label: t(language, 'employees'), icon: <Users className="w-5 h-5" /> },
+                      { id: 'monitoring', path: `/${language}/manager/monitoring`, label: t(language, 'monitoring'), icon: <TrendingUp className="w-5 h-5" /> },
+                      { id: 'rating', path: `/${language}/manager/rating`, label: t(language, 'rating'), icon: <Trophy className="w-5 h-5" /> },
+                      { id: 'reports', path: `/${language}/manager/reports`, label: t(language, 'reports'), icon: <FileText className="w-5 h-5" /> },
+                      { id: 'simcards', path: `/${language}/manager/inventory`, label: t(language, 'inventory_plan'), icon: <Smartphone className="w-5 h-5" />, count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
+                      { id: 'messages', path: `/${language}/manager/messages`, label: t(language, 'messages'), icon: <MessageSquare className="w-5 h-5" />, count: unreadMessagesCount > 0 ? unreadMessagesCount : undefined },
+                      { id: 'sales_panel', path: `/${language}/manager/sales`, label: t(language, 'sales_panel'), icon: <Briefcase className="w-5 h-5" />, count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
+                      { id: 'rules', path: `/${language}/manager/rules`, label: t(language, 'rules'), icon: <ClipboardList className="w-5 h-5" />, count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
+                      { id: 'approvals', path: `/${language}/manager/approvals`, label: t(language, 'approvals'), icon: <UserCheck className="w-5 h-5" />, count: unreadBadges.approvals > 0 ? unreadBadges.approvals : undefined },
+                      { id: 'settings', path: `/${language}/manager/settings`, label: t(language, 'settings'), icon: <Settings className="w-5 h-5" /> }
                     ].map(tab => (
                       <button
                         key={tab.id}
-                        onClick={() => {
-                          navigate(tab.path);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className={`w-full relative flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${(location.pathname === tab.path)
-                          ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20'
-                          : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
-                          }`}
-                        title={isSidebarCollapsed ? tab.label : ''}
+                        onClick={() => navigate(tab.path)}
+                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all relative group ${location.pathname === tab.path ? 'bg-brand-gold text-brand-black shadow-xl shadow-brand-gold/20' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-lg shrink-0">{tab.icon}</span>
-                          {!isSidebarCollapsed && <span className="animate-in fade-in duration-300 truncate">{tab.label}</span>}
+                        <div className={`transition-transform duration-300 ${location.pathname === tab.path ? 'scale-110' : 'group-hover:scale-110'}`}>
+                          {tab.icon}
                         </div>
-                        {!isSidebarCollapsed && tab.count ? (
-                          <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.count}</span>
-                        ) : null}
-                        {isSidebarCollapsed && tab.count ? (
-                          <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-brand-black"></div>
-                        ) : null}
+                        {!isSidebarCollapsed && <span className="uppercase tracking-widest text-[10px] font-black">{tab.label}</span>}
+
+                        {tab.count !== undefined && (
+                          <span className={`absolute ${isSidebarCollapsed ? 'top-2 right-2' : 'right-4'} px-2 py-1 rounded-lg text-[10px] font-black animate-bounce ${location.pathname === tab.path ? 'bg-brand-black text-brand-gold' : 'bg-brand-gold text-brand-black'}`}>
+                            {tab.count}
+                          </span>
+                        )}
+
+                        {location.pathname === tab.path && !isSidebarCollapsed && (
+                          <motion.div layoutId="activeTab" className="absolute right-2 w-1.5 h-1.5 rounded-full bg-brand-black" />
+                        )}
                       </button>
                     ))
                   ) : (
                     [
-                      { id: 'checkin', path: '/operator/home', label: t(language, 'home'), icon: '🏠' },
-                      { id: 'simcards', path: '/operator/inventory', label: t(language, 'inventory'), icon: '📱', count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
-                      { id: 'monitoring', path: '/operator/monitoring', label: t(language, 'monitoring'), icon: '📈' },
-                      { id: 'rating', path: '/operator/rating', label: t(language, 'rating'), icon: '🏆' },
-                      { id: 'messages', path: '/operator/messages', label: t(language, 'messages'), icon: '💬' },
-                      { id: 'rules', path: '/operator/rules', label: t(language, 'rules'), icon: '📋', count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
-                      { id: 'sales_panel', path: '/operator/sales', label: 'Savdo paneli', icon: '💼', count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
-                      { id: 'profile', path: '/operator/profile', label: t(language, 'profile'), icon: '👤' }
+                      { id: 'checkin', path: `/${language}/operator/home`, label: t(language, 'home'), icon: <Home className="w-5 h-5" /> },
+                      { id: 'simcards', path: `/${language}/operator/inventory`, label: t(language, 'inventory'), icon: <Smartphone className="w-5 h-5" />, count: unreadBadges.simcards > 0 ? unreadBadges.simcards : undefined },
+                      { id: 'monitoring', path: `/${language}/operator/monitoring`, label: t(language, 'monitoring'), icon: <TrendingUp className="w-5 h-5" /> },
+                      { id: 'rating', path: `/${language}/operator/rating`, label: t(language, 'rating'), icon: <Trophy className="w-5 h-5" /> },
+                      { id: 'messages', path: `/${language}/operator/messages`, label: t(language, 'messages'), icon: <MessageSquare className="w-5 h-5" /> },
+                      { id: 'rules', path: `/${language}/operator/rules`, label: t(language, 'rules'), icon: <ClipboardList className="w-5 h-5" />, count: unreadBadges.rules > 0 ? unreadBadges.rules : undefined },
+                      { id: 'sales_panel', path: `/${language}/operator/sales`, label: t(language, 'sales_panel'), icon: <Briefcase className="w-5 h-5" />, count: unreadBadges.sales_panel > 0 ? unreadBadges.sales_panel : undefined },
+                      { id: 'profile', path: `/${language}/operator/profile`, label: t(language, 'profile'), icon: <LucideUser className="w-5 h-5" /> }
                     ].map(tab => (
                       <button
                         key={tab.id}
-                        onClick={() => {
-                          navigate(tab.path);
-                          window.scrollTo({ top: 0, behavior: 'smooth' });
-                        }}
-                        className={`w-full relative flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} px-4 py-3.5 rounded-xl text-xs font-black transition-all uppercase tracking-wider ${(location.pathname === tab.path)
-                          ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20'
-                          : 'bg-white/5 text-white/60 hover:bg-white/10 border border-white/5'
-                          }`}
-                        title={isSidebarCollapsed ? tab.label : ''}
+                        onClick={() => navigate(tab.path)}
+                        className={`w-full flex items-center gap-4 p-4 rounded-2xl transition-all relative group ${location.pathname === tab.path ? 'bg-brand-gold text-brand-black shadow-xl shadow-brand-gold/20' : 'text-white/40 hover:bg-white/5 hover:text-white'}`}
                       >
-                        <div className="flex items-center gap-3 min-w-0">
-                          <span className="text-lg shrink-0">{tab.icon}</span>
-                          {!isSidebarCollapsed && <span className="animate-in fade-in duration-300 truncate">{tab.label}</span>}
+                        <div className={`transition-transform duration-300 ${location.pathname === tab.path ? 'scale-110' : 'group-hover:scale-110'}`}>
+                          {tab.icon}
                         </div>
-                        {!isSidebarCollapsed && tab.count ? (
-                          <span className="bg-red-500 text-white text-[10px] px-2 py-0.5 rounded-full">{tab.count}</span>
-                        ) : null}
-                        {isSidebarCollapsed && tab.count ? (
-                          <div className="absolute top-1 right-1 w-2 h-2 bg-red-500 rounded-full border border-brand-black"></div>
-                        ) : null}
+                        {!isSidebarCollapsed && <span className="uppercase tracking-widest text-[10px] font-black">{tab.label}</span>}
+                        {tab.count !== undefined && (
+                          <span className={`absolute ${isSidebarCollapsed ? 'top-2 right-2' : 'right-4'} px-2 py-1 rounded-lg text-[10px] font-black animate-bounce ${location.pathname === tab.path ? 'bg-brand-black text-brand-gold' : 'bg-brand-gold text-brand-black'}`}>
+                            {tab.count}
+                          </span>
+                        )}
+                        {location.pathname === tab.path && !isSidebarCollapsed && (
+                          <motion.div layoutId="activeTabByOperator" className="absolute right-2 w-1.5 h-1.5 rounded-full bg-brand-black" />
+                        )}
                       </button>
                     ))
                   )}
                 </div>
 
-                <div className={`p-4 border-t border-white/10 ${isSidebarCollapsed ? 'px-2' : ''}`}>
-                  <div className={`flex items-center ${isSidebarCollapsed ? 'flex-col gap-4' : 'justify-between'} bg-white/5 p-3 rounded-2xl border border-white/10`}>
-                    <div className={`flex items-center ${isSidebarCollapsed ? 'flex-col' : 'gap-3'}`}>
-                      <div className="w-10 h-10 rounded-xl bg-brand-gold/10 border border-brand-gold/30 flex items-center justify-center text-brand-gold font-black text-sm shrink-0">
-                        {state.currentUser.firstName[0]}
-                      </div>
-                      {!isSidebarCollapsed && (
-                        <div className="animate-in fade-in duration-300 overflow-hidden">
-                          <p className="text-xs font-black text-white tracking-tight truncate">{state.currentUser.firstName} {state.currentUser.lastName}</p>
-                          <p className="text-[9px] text-brand-gold font-black uppercase tracking-widest truncate">{state.currentUser.role.replace('_', ' ')}</p>
-                        </div>
-                      )}
-                    </div>
-                    <button
-                      onClick={() => setIsLogoutModalOpen(true)}
-                      className={`p-2 text-white/40 hover:text-red-500 transition-all rounded-xl hover:bg-red-500/10 border border-transparent hover:border-red-500/20 ${isSidebarCollapsed ? 'w-full flex justify-center' : ''}`}
-                      title={t(language, 'logout')}
-                    >
-                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
-                    </button>
-                  </div>
+                <div className="p-4 border-t border-white/10">
+                  <button
+                    onClick={() => setIsLogoutModalOpen(true)}
+                    className={`w-full flex items-center gap-4 p-4 rounded-2xl text-red-500 hover:bg-red-500/10 transition-all font-black uppercase tracking-widest text-[10px] ${isSidebarCollapsed ? 'justify-center' : ''}`}
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4" /><polyline points="16 17 21 12 16 7" /><line x1="21" x2="9" y1="12" y2="12" /></svg>
+                    {!isSidebarCollapsed && <span>{t(language, 'logout')}</span>}
+                  </button>
                 </div>
               </aside>
 
-              <main className="flex-1 overflow-y-auto p-3 sm:p-6 lg:p-8">
+              <main className="flex-1 min-w-0 h-screen overflow-y-auto bg-brand-black custom-scrollbar relative p-4 lg:p-6">
                 {(() => {
-                  const managerProps = {
-                    state,
-                    isDarkMode,
-                    refreshData: fetchData,
-                    language,
-                    calculateAchievements,
-                    approveUser: (userId: string) => setState(prev => ({ ...prev, users: prev.users.map(u => u.id === userId ? { ...u, isApproved: true } : u) })),
-                    updateUser: (userId: string, updates: any) => setState(prev => {
-                      let newCheckIns = prev.checkIns;
-                      if (updates.workingHours) {
-                        const user = prev.users.find(u => u.id === userId);
-                        if (user) {
-                          const today = getTodayStr();
-                          newCheckIns = prev.checkIns.map(ci => {
-                            if (ci.userId === userId) {
-                              const isToday = ci.date === today || isDateMatch(ci.timestamp, today);
-                              if (isToday) return { ...ci, workingHours: updates.workingHours };
-                              else if (!ci.workingHours && user.workingHours) return { ...ci, workingHours: user.workingHours };
-                            }
-                            return ci;
-                          });
-                        }
-                      }
-                      return { ...prev, users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u), checkIns: newCheckIns };
-                    }),
-                    updateCheckIn: (userId: string, date: string, updates: any) => setState(prev => ({ ...prev, checkIns: prev.checkIns.map(c => c.userId === userId && isDateMatch(c.timestamp, date) ? { ...c, ...updates } : c) })),
-                    updateReport: (userId: string, date: string, updates: any) => setState(prev => ({ ...prev, reports: prev.reports.map(r => r.userId === userId && r.date === date ? { ...r, ...updates } : r) })),
-                    addMessage: (text: string, recipientId: string) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: 'MENEJER', recipientId, text, timestamp: new Date().toISOString(), isRead: false }] })),
-                    markMessageAsRead: (msgId: string) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) })),
-                    setActiveTab: (t: string) => navigate(t === 'overview' ? '/' : `/${t}`),
-                    addSimInventory: (company: string, count: number) => setState(prev => ({ ...prev, simInventory: { ...prev.simInventory, [company]: (prev.simInventory[company] || 0) + count } })),
-                    setMonthlyTarget: (month: string, targets: any, officeCounts: any, mobileOfficeCounts: any) => setState(prev => {
-                      const existing = prev.monthlyTargets.find(t => t.month === month);
-                      if (existing) return { ...prev, monthlyTargets: prev.monthlyTargets.map(t => t.month === month ? { ...t, targets, officeCounts, mobileOfficeCounts } : t) };
-                      return { ...prev, monthlyTargets: [...prev.monthlyTargets, { month, targets, officeCounts, mobileOfficeCounts }] };
-                    }),
-                    addTariff: (company: string, tariff: string) => setState(prev => {
-                      const currentTariffs = prev.tariffs?.[company] || [];
-                      if (!currentTariffs.includes(tariff)) return { ...prev, tariffs: { ...prev.tariffs, [company]: [...currentTariffs, tariff] } };
-                      return prev;
-                    }),
-                    removeTariff: (company: string, tariff: string) => setState(prev => ({ ...prev, tariffs: { ...prev.tariffs, [company]: (prev.tariffs?.[company] || []).filter(t => t !== tariff) } })),
-                    addSalesLink: (link: any) => setState(prev => ({ ...prev, salesLinks: [...prev.salesLinks, { ...link, id: Date.now().toString(), createdAt: new Date().toISOString() }] })),
-                    removeSalesLink: (linkId: string) => setState(prev => ({ ...prev, salesLinks: prev.salesLinks.filter(l => l.id !== linkId) })),
-                    updateSalesLink: (linkId: string, updates: any) => setState(prev => ({ ...prev, salesLinks: prev.salesLinks.map(l => l.id === linkId ? { ...l, ...updates } : l) })),
-                    showNotification
-                  };
-
-                  const operatorProps = {
-                    user: state.currentUser!,
-                    state,
-                    addCheckIn: (checkIn: any) => setState(prev => ({ ...prev, checkIns: [...prev.checkIns, checkIn] })),
-                    updateCheckIn: (userId: string, date: string, updates: any) => setState(prev => ({ ...prev, checkIns: prev.checkIns.map(c => c.userId === userId && c.timestamp.startsWith(date) ? { ...c, ...updates } : c) })),
-                    updateReport: (userId: string, date: string, updates: any) => setState(prev => ({ ...prev, reports: prev.reports.map(r => r.userId === userId && r.date === date ? { ...r, ...updates } : r) })),
-                    updateUser: (userId: string, updates: any) => setState(prev => {
-                      let newCheckIns = prev.checkIns;
-                      if (updates.workingHours) {
-                        const user = prev.users.find(u => u.id === userId);
-                        if (user) {
-                          const today = getTodayStr();
-                          newCheckIns = prev.checkIns.map(ci => {
-                            if (ci.userId === userId) {
-                              const isToday = ci.date === today || isDateMatch(ci.timestamp, today);
-                              if (isToday) return { ...ci, workingHours: updates.workingHours };
-                              else if (!ci.workingHours && user.workingHours) return { ...ci, workingHours: user.workingHours };
-                            }
-                            return ci;
-                          });
-                        }
-                      }
-                      return { ...prev, users: prev.users.map(u => u.id === userId ? { ...u, ...updates } : u), checkIns: newCheckIns };
-                    }),
-                    addSale: (sale: any) => setState(prev => {
-                      const user = prev.users.find(u => u.id === sale.userId);
-                      if (user && user.inventory) {
-                        const newInventory = { ...user.inventory };
-                        if (newInventory[sale.company] >= (sale.count + sale.bonus)) {
-                          newInventory[sale.company] -= (sale.count + sale.bonus);
-                          const updatedUsers = prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u);
-                          return { ...prev, users: updatedUsers, currentUser: prev.currentUser && prev.currentUser.id === user.id ? { ...prev.currentUser, inventory: newInventory } : prev.currentUser, sales: [...prev.sales, sale] };
-                        }
-                      }
-                      return prev;
-                    }),
-                    removeSale: (saleId: string) => setState(prev => {
-                      const sale = prev.sales.find(s => s.id === saleId);
-                      if (sale) {
-                        const user = prev.users.find(u => u.id === sale.userId);
-                        let updatedUsers = prev.users;
-                        let updatedCurrentUser = prev.currentUser;
-                        if (user && user.inventory) {
-                          const newInventory = { ...user.inventory };
-                          newInventory[sale.company] = (newInventory[sale.company] || 0) + (sale.count + sale.bonus);
-                          updatedUsers = prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u);
-                          if (prev.currentUser && prev.currentUser.id === user.id) updatedCurrentUser = { ...prev.currentUser, inventory: newInventory };
-                        }
-                        return { ...prev, users: updatedUsers, currentUser: updatedCurrentUser, sales: prev.sales.filter(s => s.id !== saleId) };
-                      }
-                      return prev;
-                    }),
-                    updateSale: (saleId: string, updates: any) => setState(prev => {
-                      const oldSale = prev.sales.find(s => s.id === saleId);
-                      if (oldSale) {
-                        const user = prev.users.find(u => u.id === oldSale.userId);
-                        if (user && user.inventory) {
-                          const newInventory = { ...user.inventory };
-                          newInventory[oldSale.company] = (newInventory[oldSale.company] || 0) + (oldSale.count + oldSale.bonus);
-                          const newCount = updates.count !== undefined ? updates.count : oldSale.count;
-                          const newBonus = updates.bonus !== undefined ? updates.bonus : oldSale.bonus;
-                          const newCompany = updates.company || oldSale.company;
-                          if (newInventory[newCompany] >= (newCount + newBonus)) {
-                            newInventory[newCompany] -= (newCount + newBonus);
-                            return { ...prev, users: prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u), sales: prev.sales.map(s => s.id === saleId ? { ...s, ...updates } : s) };
-                          }
-                        }
-                      }
-                      return prev;
-                    }),
-                    addReport: (report: any) => setState(prev => ({ ...prev, reports: [...prev.reports, report] })),
-                    addSimInventory: (company: string, count: number) => setState(prev => {
-                      const user = prev.users.find(u => u.id === state.currentUser!.id);
-                      if (user) {
-                        const newInventory = { ...(user.inventory || {}) };
-                        newInventory[company] = (newInventory[company] || 0) + count;
-                        return { ...prev, users: prev.users.map(u => u.id === user.id ? { ...u, inventory: newInventory } : u) };
-                      }
-                      return prev;
-                    }),
-                    addMessage: (text: string) => setState(prev => ({ ...prev, messages: [...prev.messages, { id: Date.now().toString(), senderId: state.currentUser!.id, senderName: `${state.currentUser!.firstName} ${state.currentUser!.lastName}`, recipientId: 'manager', text, timestamp: new Date().toISOString(), isRead: false }] })),
-                    markMessageAsRead: (msgId: string) => setState(prev => ({ ...prev, messages: prev.messages.map(m => m.id === msgId ? { ...m, isRead: true } : m) })),
-                    refreshData: fetchData,
-                    isDarkMode,
-                    language,
-                    showNotification
-                  };
+                  const managerProps = { state, setState, language, showNotification, isDarkMode, calculateAchievements, refreshData: fetchData };
+                  const operatorProps = { user: state.currentUser!, state, setState, language, showNotification, isDarkMode, refreshData: fetchData };
 
                   return (
                     <Routes>
                       {state.currentUser!.role === Role.MANAGER ? (
                         <>
-                          <Route path="/" element={<Navigate to="/manager/overview" replace />} />
-                          <Route path="/manager/overview" element={<ManagerPanel {...managerProps} activeTab="overview" />} />
-                          <Route path="/manager/users" element={<ManagerPanel {...managerProps} activeTab="users" />} />
-                          <Route path="/manager/users/:userNameOrId" element={<ManagerPanel {...managerProps} activeTab="users" />} />
-                          <Route path="/manager/monitoring" element={<ManagerPanel {...managerProps} activeTab="monitoring" />} />
-                          <Route path="/manager/rating" element={<ManagerPanel {...managerProps} activeTab="rating" />} />
-                          <Route path="/manager/reports" element={<ManagerPanel {...managerProps} activeTab="reports" />} />
-                          <Route path="/manager/inventory" element={<ManagerPanel {...managerProps} activeTab="simcards" />} />
-                          <Route path="/manager/messages" element={<ManagerPanel {...managerProps} activeTab="messages" />} />
-                          <Route path="/manager/sales" element={<ManagerPanel {...managerProps} activeTab="sales_panel" />} />
-                          <Route path="/manager/rules" element={<><ManagerPanel {...managerProps} activeTab="rules" /><RulesPanel state={state} setState={setState} language={language} showNotification={showNotification} /></>} />
-                          <Route path="/manager/approvals" element={<ManagerPanel {...managerProps} activeTab="approvals" />} />
-                          <Route path="/manager/settings" element={<ManagerPanel {...managerProps} activeTab="settings" />} />
+                          <Route path="/" element={<Navigate to="manager/overview" replace />} />
+                          <Route path="manager/overview" element={<ManagerPanel {...managerProps} activeTab="overview" />} />
+                          <Route path="manager/users" element={<ManagerPanel {...managerProps} activeTab="users" />} />
+                          <Route path="manager/users/:userNameOrId" element={<ManagerPanel {...managerProps} activeTab="users" />} />
+                          <Route path="manager/monitoring" element={<ManagerPanel {...managerProps} activeTab="monitoring" />} />
+                          <Route path="manager/rating" element={<ManagerPanel {...managerProps} activeTab="rating" />} />
+                          <Route path="manager/reports" element={<ManagerPanel {...managerProps} activeTab="reports" />} />
+                          <Route path="manager/inventory" element={<ManagerPanel {...managerProps} activeTab="simcards" />} />
+                          <Route path="manager/messages" element={<ManagerPanel {...managerProps} activeTab="messages" />} />
+                          <Route path="manager/sales" element={<ManagerPanel {...managerProps} activeTab="sales_panel" />} />
+                          <Route path="manager/rules" element={<><ManagerPanel {...managerProps} activeTab="rules" /><RulesPanel state={state} setState={setState} language={language} showNotification={showNotification} /></>} />
+                          <Route path="manager/approvals" element={<ManagerPanel {...managerProps} activeTab="approvals" />} />
+                          <Route path="manager/settings" element={<ManagerPanel {...managerProps} activeTab="settings" />} />
                         </>
                       ) : (
                         <>
-                          <Route path="/" element={<Navigate to="/operator/home" replace />} />
-                          <Route path="/operator/home" element={<OperatorPanel {...operatorProps} activeTab="checkin" />} />
-                          <Route path="/operator/inventory" element={<OperatorPanel {...operatorProps} activeTab="simcards" />} />
-                          <Route path="/operator/monitoring" element={<OperatorPanel {...operatorProps} activeTab="monitoring" />} />
-                          <Route path="/operator/rating" element={<OperatorPanel {...operatorProps} activeTab="rating" />} />
-                          <Route path="/operator/messages" element={<OperatorPanel {...operatorProps} activeTab="messages" />} />
-                          <Route path="/operator/rules" element={<RulesView state={state} language={language} />} />
-                          <Route path="/operator/sales" element={<OperatorPanel {...operatorProps} activeTab="sales_panel" />} />
-                          <Route path="/operator/profile" element={<OperatorPanel {...operatorProps} activeTab="profile" />} />
+                          <Route path="/" element={<Navigate to="operator/home" replace />} />
+                          <Route path="operator/home" element={<OperatorPanel {...operatorProps} activeTab="checkin" />} />
+                          <Route path="operator/inventory" element={<OperatorPanel {...operatorProps} activeTab="simcards" />} />
+                          <Route path="operator/monitoring" element={<OperatorPanel {...operatorProps} activeTab="monitoring" />} />
+                          <Route path="operator/rating" element={<OperatorPanel {...operatorProps} activeTab="rating" />} />
+                          <Route path="operator/messages" element={<OperatorPanel {...operatorProps} activeTab="messages" />} />
+                          <Route path="operator/rules" element={<RulesView state={state} language={language} />} />
+                          <Route path="operator/sales" element={<OperatorPanel {...operatorProps} activeTab="sales_panel" />} />
+                          <Route path="operator/profile" element={<OperatorPanel {...operatorProps} activeTab="profile" />} />
                         </>
                       )}
                     </Routes>
@@ -1178,8 +1018,8 @@ const ArrivalChecker: React.FC = () => {
                               <RotateCcw className="w-5 h-5" />
                             </div>
                             <div>
-                              <h3 className="text-lg font-black text-white uppercase tracking-tight">Qayta hisoblash</h3>
-                              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">Yutuqlarni qayta tekshirish</p>
+                              <h3 className="text-lg font-black text-white uppercase tracking-tight">{t(language, 'recalculate')}</h3>
+                              <p className="text-[10px] text-white/40 font-bold uppercase tracking-widest">{t(language, 'recalculate_desc')}</p>
                             </div>
                           </div>
                           <button onClick={() => setIsAchievementModalOpen(false)} className="p-2 hover:bg-white/5 rounded-xl transition-colors text-white/20 hover:text-white">
@@ -1189,7 +1029,7 @@ const ArrivalChecker: React.FC = () => {
 
                         <div className="space-y-4">
                           <p className="text-sm text-white/60 leading-relaxed">
-                            Qaysi oy uchun yutuqlarni hisoblamoqchisiz? Format: YYYY-MM (masalan: 2026-02)
+                            {t(language, 'which_month')} {t(language, 'format_example')}
                           </p>
                           <div className="relative">
                             <input
@@ -1207,7 +1047,7 @@ const ArrivalChecker: React.FC = () => {
                             onClick={() => setIsAchievementModalOpen(false)}
                             className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white/60 font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all border border-white/10"
                           >
-                            Bekor qilish
+                            {t(language, 'cancel')}
                           </button>
                           <button
                             onClick={() => {
@@ -1220,7 +1060,7 @@ const ArrivalChecker: React.FC = () => {
                             }}
                             className="flex-1 py-4 bg-green-500 text-brand-black font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all shadow-lg shadow-green-500/20 hover:scale-[1.02] active:scale-95"
                           >
-                            Hisoblash
+                            {t(language, 'calculate')}
                           </button>
                         </div>
                       </div>
@@ -1248,7 +1088,7 @@ const ArrivalChecker: React.FC = () => {
                           onClick={() => setIsLogoutModalOpen(false)}
                           className="flex-1 py-4 bg-white/5 hover:bg-white/10 text-white/60 font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all border border-white/10"
                         >
-                          Yo'q
+                           {t(language, 'no')}
                         </button>
                         <button
                           onClick={() => {
@@ -1256,22 +1096,26 @@ const ArrivalChecker: React.FC = () => {
                             handleLogout();
                           }}
                           className="flex-1 py-4 bg-red-500 text-white font-black uppercase tracking-widest text-[10px] rounded-2xl transition-all shadow-lg shadow-red-500/20 hover:scale-[1.02] active:scale-95"
-                        >
-                          Ha
-                        </button>
-                      </div>
-                    </motion.div>
-                  </div>
-                )}
-              </AnimatePresence>
-            </div>
+                          >
+                            {t(language, 'yes')}
+                          </button>
+                        </div>
+                      </motion.div>
+                    </div>
+                  )}
+                </AnimatePresence>
+              </div>
+            )
+          ) : (
+            <Navigate to={`/${language}/login`} replace />
           )
-        ) : (
-          <Navigate to="/login" replace />
-        )
-      } />
-    </Routes>
-  );
+        } />
+        {/* Root and Legacy Redirects */}
+        <Route path="/login" element={<Navigate to={`/${language}/login`} replace />} />
+        <Route path="/" element={<Navigate to={`/${language}${state.currentUser ? (state.currentUser.role === Role.MANAGER ? '/manager/overview' : '/operator/home') : '/login'}`} replace />} />
+        <Route path="*" element={<Navigate to={`/${language}/`} replace />} />
+      </Routes>
+    );
 };
 
 export default ArrivalChecker;

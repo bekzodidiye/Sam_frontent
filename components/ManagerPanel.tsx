@@ -39,10 +39,11 @@ import * as L from 'leaflet';
 import { getTodayStr, isDateMatch, getLatenessStatus, getEarlyDepartureStatus, getUzTime, formatUzTime, formatUzDateTime } from '../utils';
 import MapPicker from './MapPicker';
 import StaffMap from './StaffMap';
+import RulesPanel from './RulesPanel';
 import { t, Language, translations } from '../translations';
 import { userService, checkInService, saleService, messageService, targetService, ruleService, linkService, settingsService, operatorRatingService } from '../api';
 
-const StatCard = ({ label, value, icon, color, companySales = [], operators = [], isExpanded, onToggle }: any) => {
+const StatCard = ({ label, value, icon, color, companySales = [], operators = [], isExpanded, onToggle, language }: any) => {
   const [currentPage, setCurrentPage] = React.useState(1);
   const itemsPerPage = 6;
 
@@ -105,7 +106,7 @@ const StatCard = ({ label, value, icon, color, companySales = [], operators = []
                     disabled={currentPage === 1}
                     className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
                   >
-                    Oldingi
+                    {t(language, 'previous')}
                   </button>
                   <span className="text-[10px] font-black text-white/20 uppercase tracking-widest">{currentPage} / {totalPages}</span>
                   <button 
@@ -113,13 +114,13 @@ const StatCard = ({ label, value, icon, color, companySales = [], operators = []
                     disabled={currentPage === totalPages}
                     className="p-1 px-3 bg-brand-black border border-white/10 rounded-lg text-[10px] font-black uppercase text-white/40 disabled:opacity-20 transition-all hover:text-white"
                   >
-                    Keyingi
+                    {t(language, 'next')}
                   </button>
                 </div>
               )}
             </div>
           ) : (
-            <p className="text-xs text-white/40 text-center mt-3 py-2">Xodimlar yo'q</p>
+            <p className="text-xs text-white/40 text-center mt-3 py-2">{t(language, 'no_staff')}</p>
           )}
         </div>
       </div>
@@ -170,7 +171,7 @@ const getMediaUrl = (url: string | null | undefined) => {
   if (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('data:')) {
     return url;
   }
-  const baseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8000';
+  const baseUrl = (import.meta as any).env.VITE_API_URL || 'http://localhost:8003';
   // If baseUrl ends with /api/v1/, strip it for media
   const cleanBaseUrl = baseUrl.replace(/\/api\/v1\/?$/, '');
   return `${cleanBaseUrl}${url.startsWith('/') ? '' : '/'}${url}`;
@@ -189,6 +190,16 @@ const SingleLocationMap: React.FC<{
   const endMarkerRef = useRef<L.Marker | null>(null);
 
   useEffect(() => {
+    if (!location && !endLocation) {
+      if (leafletMap.current) {
+        leafletMap.current.remove();
+        leafletMap.current = null;
+        startMarkerRef.current = null;
+        endMarkerRef.current = null;
+      }
+      return;
+    }
+
     if (mapRef.current && !leafletMap.current && (location || endLocation)) {
       const center = location || endLocation!;
       leafletMap.current = L.map(mapRef.current, {
@@ -276,12 +287,12 @@ const SingleLocationMap: React.FC<{
       <div className="w-16 h-16 bg-brand-dark rounded-full flex items-center justify-center shadow-sm mb-4 border border-white/10">
         <MapPin className="w-8 h-8 opacity-20" />
       </div>
-      Joylashuv ma'lumotlari topilmadi
+      {t(language, 'location_not_found')}
     </div>
   );
 
   return (
-    <div className="h-56 rounded-[2rem] overflow-hidden border border-white/10 shadow-inner relative group">
+    <div className="h-56 rounded-[2rem] overflow-hidden border border-white/10 shadow-inner relative group isolate">
       <div ref={mapRef} className="w-full h-full z-0" />
       <div className="absolute top-4 right-4 z-10 flex flex-col gap-2">
         <a
@@ -289,7 +300,7 @@ const SingleLocationMap: React.FC<{
           target="_blank"
           rel="noopener noreferrer"
           className="bg-brand-black/95 backdrop-blur-md p-2.5 rounded-xl shadow-lg border border-white/10 text-brand-gold hover:text-brand-gold/80 transition-all block hover:scale-105"
-          title="Google Maps'da ko'rish"
+          title={t(language, 'view_on_google_maps')}
         >
           <ExternalLink className="w-4 h-4" />
         </a>
@@ -301,8 +312,8 @@ const SingleLocationMap: React.FC<{
   );
 };
 
-const PhotoViewer: React.FC<{ photo: string; onClose: () => void }> = ({ photo, onClose }) => (
-  <div className="fixed inset-0 z-[200] flex items-center justify-center p-4 animate-in fade-in duration-300">
+const PhotoViewer: React.FC<{ photo: string; onClose: () => void; language: 'uz' | 'ru' | 'en' }> = ({ photo, onClose, language }) => (
+  <div className="fixed inset-0 z-[300] flex items-center justify-center p-4 animate-in fade-in duration-300">
     <div className="absolute inset-0 bg-black/95 backdrop-blur-xl" onClick={onClose}></div>
     <div className="relative z-10 max-w-[95vw] max-h-[90vh] flex flex-col items-center justify-center animate-in zoom-in-95">
       <button
@@ -317,7 +328,7 @@ const PhotoViewer: React.FC<{ photo: string; onClose: () => void }> = ({ photo, 
         alt="Full view"
       />
       <div className="mt-4 bg-black/60 backdrop-blur-md text-white/90 text-[10px] font-black uppercase tracking-widest px-6 py-2 rounded-full border border-white/10">
-        Yopish uchun ekranga bosing
+        {t(language, 'click_to_close')}
       </div>
     </div>
   </div>
@@ -369,11 +380,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
       if (newId) {
         const u = state.users.find(x => x.id === newId);
         if (u) {
-          const param = u.nickname || u.username || u.phone || u.id;
-          navigate(`/manager/users/${encodeURIComponent(param)}`);
+          const param = u.nickname || u.phone || u.id;
+          navigate(`/${language}/manager/users/${encodeURIComponent(param)}`);
         }
       } else {
-        navigate(`/manager/users`);
+        navigate(`/${language}/manager/users`);
       }
     }
     setSelectedUserIdInternal(newId);
@@ -385,15 +396,30 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
     if (activeTab === 'users') {
       if (userNameOrId) {
         const decoded = decodeURIComponent(userNameOrId);
-        const user = state.users.find(u => 
-          u.nickname === decoded || 
-          u.username === decoded || 
-          u.phone === decoded || 
-          u.phone === '+' + decoded ||
-          u.id === decoded
-        );
-        if (user && selectedUserIdInternal !== user.id) {
-          setSelectedUserIdInternal(user.id);
+        const user = state.users.find(u => {
+          const uNickname = (u.nickname || '').trim().toLowerCase();
+          const uPhone = (u.phone || '').trim().toLowerCase();
+          const uId = (u.id || '').trim().toLowerCase();
+          const uFullName = `${u.firstName || ''} ${u.lastName || ''}`.trim().toLowerCase();
+          const search = decoded.trim().toLowerCase();
+          const searchNoSpace = search.replace(/\s+/g, '');
+          
+          return uNickname === search || 
+                 uNickname.replace(/\s+/g, '') === searchNoSpace ||
+                 uPhone === search || 
+                 uPhone === '+' + search ||
+                 '+' + uPhone === search ||
+                 uId === search ||
+                 uFullName === search ||
+                 uFullName.replace(/\s+/g, '') === searchNoSpace;
+        });
+
+        if (user) {
+          if (selectedUserIdInternal !== user.id) {
+            setSelectedUserIdInternal(user.id);
+          }
+        } else if (selectedUserIdInternal !== null) {
+          setSelectedUserIdInternal(null);
         }
       } else if (selectedUserIdInternal !== null) {
         setSelectedUserIdInternal(null);
@@ -453,6 +479,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
   const [isWorkPointModalOpen, setIsWorkPointModalOpen] = useState(false);
   const [workPointForm, setWorkPointForm] = useState<{ userId: string, location: { lat: number, lng: number } | null, radius: number, workType: 'office' | 'mobile' | 'desk' }>({ userId: '', location: null, radius: 200, workType: 'office' });
   const [isWorkPointOperatorDropdownOpen, setIsWorkPointOperatorDropdownOpen] = useState(false);
+  const [isWorkPointDepartmentDropdownOpen, setIsWorkPointDepartmentDropdownOpen] = useState(false);
   const [isLeagueDeleteConfirmOpen, setIsLeagueDeleteConfirmOpen] = useState(false);
   const [leagueUserToDelete, setLeagueUserToDelete] = useState<User | null>(null);
 
@@ -699,10 +726,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
     try {
       await userService.updateUser(userId, { inventory: currentInventory });
-      showNotification("Simkartalar muvaffaqiyatli berildi", 'success');
+      showNotification(t(language, 'simcards_given_success'), 'success');
     } catch (err) {
       console.error("Failed to give sims", err);
-      showNotification("Xatolik yuz berdi", 'error');
+      showNotification(t(language, 'update_error'), 'error');
     }
   };
 
@@ -882,7 +909,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
       const currentDayIndex = d.getDay();
       const diffToMonday = (currentDayIndex === 0 ? -6 : 1 - currentDayIndex);
       const targetMonday = new Date(d.getFullYear(), d.getMonth(), d.getDate() + diffToMonday + (wOffset * 7));
-      const uzDays = ['Yak', 'Dush', 'Sesh', 'Chor', 'Pay', 'Juma', 'Shan'];
+      const uzDays = translations[language].day_names_short;
+      if (!uzDays) return data; // Fallback
 
       for (let i = 0; i < 7; i++) {
         const current = new Date(targetMonday);
@@ -921,7 +949,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
         const monthSales = state.sales.filter(s => s.userId === userId && s.date.startsWith(monthPrefix));
         const simcards = monthSales.reduce((sum, s) => sum + s.count, 0);
         const bonuses = monthSales.reduce((sum, s) => sum + s.bonus, 0);
-        const monthNames = ["Yan", "Fev", "Mar", "Apr", "May", "Iyun", "Iyul", "Avg", "Sen", "Okt", "Noy", "Dek"];
+        const monthNames = translations[language].month_names_short;
         data.push({ name: monthNames[m], fullDate: `${targetYear}-${String(monthNum).padStart(2, '0')}-01`, simcards, bonuses });
       }
     }
@@ -946,7 +974,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
       const monthName = translations[language].month_names[d.getMonth()];
       return `${d.getDate()} ${monthName}`;
     }
-    if (chartTimeframe === 'week') return 'Haftalik';
+    if (chartTimeframe === 'week') return t(language, 'weekly');
     if (chartTimeframe === 'month') {
       const d = new Date();
       d.setDate(1);
@@ -1214,10 +1242,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
   return (
     <div className="space-y-6">
-      {viewingPhoto && <PhotoViewer photo={viewingPhoto} onClose={() => setViewingPhoto(null)} />}
+      {viewingPhoto && <PhotoViewer photo={viewingPhoto} language={language} onClose={() => setViewingPhoto(null)} />}
 
       {isSendMessageModalOpen && (
-        <div className="fixed inset-0 z-[150] flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[300] flex items-center justify-center p-2 sm:p-4 animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-md" onClick={() => setIsSendMessageModalOpen(false)}></div>
           <div className="bg-brand-dark w-full max-w-lg rounded-[2rem] sm:rounded-[2.5rem] shadow-2xl relative z-10 overflow-hidden animate-in zoom-in-95 duration-300 border border-white/10">
             <div className="p-6 sm:p-8 border-b border-white/5 flex items-center justify-between bg-brand-black">
@@ -1226,8 +1254,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   <Send className="w-4 h-4 sm:w-5 sm:h-5" />
                 </div>
                 <div>
-                  <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">Xabar yuborish</h3>
-                  <p className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">Yangi xabar yaratish</p>
+                  <h3 className="text-lg sm:text-xl font-black text-white tracking-tight">{t(language, 'send_message_title')}</h3>
+                  <p className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">{t(language, 'create_new_message')}</p>
                 </div>
               </div>
               <button onClick={() => setIsSendMessageModalOpen(false)} className="p-2 bg-brand-black rounded-xl text-white/40 hover:text-white transition shadow-sm border border-white/10">
@@ -1241,16 +1269,16 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 <Send className="w-10 h-10 relative z-10" />
               </div>
               <div className="space-y-2">
-                 <h3 className="text-2xl font-black text-white uppercase tracking-tight">Tez Orada</h3>
+                 <h3 className="text-2xl font-black text-white uppercase tracking-tight">{t(language, 'coming_soon')}</h3>
                  <p className="text-white/40 font-bold uppercase tracking-widest text-[10px] leading-relaxed max-w-[240px]">
-                    Xabar yuborish tizimi tez orada ishga tushadi. Iltimos kuting.
+                    {t(language, 'coming_soon_desc')}
                  </p>
               </div>
               <button 
                  onClick={() => setIsSendMessageModalOpen(false)}
                  className="w-full py-4 bg-white/5 hover:bg-white/10 text-white/60 rounded-[1.5rem] font-black uppercase tracking-widest text-[10px] border border-white/5 transition-all"
               >
-                 Tushunarli
+                 {t(language, 'understood')}
               </button>
             </div>
           </div>
@@ -1269,6 +1297,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               operators={operators}
               isExpanded={expandedCard === 'Ucell'}
               onToggle={(e) => { e.stopPropagation(); setExpandedCard(prev => prev === 'Ucell' ? null : 'Ucell'); }}
+              language={language}
             />
             <StatCard
               label="Uztelecom"
@@ -1279,6 +1308,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               operators={operators}
               isExpanded={expandedCard === 'Uztelecom'}
               onToggle={(e) => { e.stopPropagation(); setExpandedCard(prev => prev === 'Uztelecom' ? null : 'Uztelecom'); }}
+              language={language}
             />
             <StatCard
               label="Mobiuz"
@@ -1289,6 +1319,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               operators={operators}
               isExpanded={expandedCard === 'Mobiuz'}
               onToggle={(e) => { e.stopPropagation(); setExpandedCard(prev => prev === 'Mobiuz' ? null : 'Mobiuz'); }}
+              language={language}
             />
             <StatCard
               label="Beeline"
@@ -1299,6 +1330,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               operators={operators}
               isExpanded={expandedCard === 'Beeline'}
               onToggle={(e) => { e.stopPropagation(); setExpandedCard(prev => prev === 'Beeline' ? null : 'Beeline'); }}
+              language={language}
             />
           </div>
 
@@ -1367,9 +1399,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                             </div>
                           </td>
                           <td className="px-4 sm:px-8 py-4 sm:py-5">
-                            <span className="text-[8px] sm:text-[10px] font-black text-white/30 uppercase tracking-tighter bg-white/5 px-2 py-1 rounded-md whitespace-nowrap">
-                              {op.role.replace('_', ' ')}
-                            </span>
+                              {t(language, (op.role || '').toLowerCase() as any)}
                           </td>
                           <td className="px-4 sm:px-8 py-4 sm:py-5 text-center">
                             <div className="inline-flex flex-col">
@@ -1440,7 +1470,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                             <div className="flex flex-col min-w-0">
                               <span className="font-bold text-white text-sm truncate">{op.firstName} {op.lastName}</span>
                               <span className="text-[8px] font-black text-white/30 uppercase tracking-tighter bg-white/5 px-2 py-0.5 rounded-md w-fit mt-0.5">
-                                {op.role.replace('_', ' ')}
+                                {t(language, (op.role || '').toLowerCase() as any)}
                               </span>
                             </div>
                           </div>
@@ -1509,7 +1539,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
           <div className="bg-brand-dark p-4 rounded-3xl shadow-sm border border-white/10 h-[800px] sm:h-[650px] flex flex-col sm:flex-row gap-4">
             <div className="w-full sm:w-64 border-b sm:border-b-0 sm:border-r border-white/5 p-2 flex flex-col gap-3 shrink-0">
-              <h3 className="text-base font-black text-white mb-0 sm:mb-4 shrink-0 sm:shrink">Operatorlar bo'limi</h3>
+              <h3 className="text-base font-black text-white mb-0 sm:mb-4 shrink-0 sm:shrink">{t(language, 'operators_section')}</h3>
 
               {/* Mobile Dropdown */}
               <div className="sm:hidden relative">
@@ -1518,7 +1548,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   value={mapSelectedUserId || ''}
                   onChange={(e) => setMapSelectedUserId(e.target.value)}
                 >
-                  <option value="" disabled>Operatorni tanlang</option>
+                  <option value="" disabled>{t(language, 'select_operator')}</option>
                   {operators.map(op => (
                     <option key={op.id} value={op.id}>
                       {op.firstName} {op.lastName}
@@ -1551,14 +1581,14 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             </div>
             <div className="flex-1 flex flex-col overflow-hidden min-h-[400px] sm:min-h-0">
               <div className="p-2 mb-2 border-b border-white/5 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2">
-                <h3 className="text-base font-black text-white flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-gold" /> Jonli Monitoring</h3>
+                <h3 className="text-base font-black text-white flex items-center gap-2"><MapPin className="w-4 h-4 text-brand-gold" /> {t(language, 'live_monitoring')}</h3>
                 <div className="flex items-center gap-4 w-full sm:w-auto justify-between sm:justify-end">
                   <span className="text-[10px] font-black text-white/40 uppercase tracking-widest">{new Date().toISOString().slice(0, 10)}</span>
                   <button
                     onClick={() => setIsWorkPointModalOpen(true)}
                     className="flex items-center gap-2 px-4 py-2 bg-brand-gold text-brand-black text-[10px] font-black uppercase tracking-widest rounded-xl hover:scale-[1.02] active:scale-95 transition-all shadow-lg shadow-brand-gold/20 shrink-0"
                   >
-                    <PlusCircle className="w-4 h-4" /> Ish nuqtasini kiritish
+                    <PlusCircle className="w-4 h-4" /> {t(language, 'enter_work_point')}
                   </button>
                 </div>
               </div>
@@ -1575,9 +1605,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             <div>
               <h2 className="text-xl sm:text-2xl font-black text-white flex items-center gap-3">
                 <Activity className="w-6 h-6 sm:w-8 sm:h-8 text-brand-gold" />
-                Monitoring
+                {t(language, 'monitoring')}
               </h2>
-              <p className="text-white/40 font-medium mt-1 text-xs sm:text-sm">Barcha operatorlarning savdo ko'rsatkichlari</p>
+              <p className="text-white/40 font-medium mt-1 text-xs sm:text-sm">{t(language, 'monitoring_subtitle')}</p>
             </div>
 
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-4">
@@ -1586,7 +1616,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   onClick={() => setMonitoringTimeframe('today')}
                   className={`flex-1 sm:flex-none px-4 py-2 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${monitoringTimeframe === 'today' ? 'bg-brand-gold text-brand-black shadow-sm' : 'text-white/40 hover:text-white'}`}
                 >
-                  Bugun
+                  {t(language, 'today')}
                 </button>
                 <button
                   onClick={() => setMonitoringTimeframe('week')}
@@ -1676,7 +1706,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                 <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-brand-gold">
                                   <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
-                                    <span>Simkartalar:</span>
+                                    <span>{t(language, 'simcards_label')}:</span>
                                   </div>
                                   <span>{p.value}</span>
                                 </div>
@@ -1685,7 +1715,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                 <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-[#10B981]">
                                   <div className="flex items-center gap-2">
                                     <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
-                                    <span>Bonuslar:</span>
+                                    <span>{t(language, 'bonuses_label')}:</span>
                                   </div>
                                   <span>{p.value}</span>
                                 </div>
@@ -1706,11 +1736,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         <div className="flex items-center gap-6">
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
-                            <span className="text-xs font-bold text-white/60 uppercase tracking-wider">Simkartalar: {monitoringTotals.totalSimcards}</span>
+                            <span className="text-xs font-bold text-white/60 uppercase tracking-wider">{t(language, 'simcards_label')}: {monitoringTotals.totalSimcards}</span>
                           </div>
                           <div className="flex items-center gap-2">
                             <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
-                            <span className="text-xs font-bold text-white/60 uppercase tracking-wider">Bonuslar: {monitoringTotals.totalBonuses}</span>
+                            <span className="text-xs font-bold text-white/60 uppercase tracking-wider">{t(language, 'bonuses_label')}: {monitoringTotals.totalBonuses}</span>
                           </div>
                         </div>
                       </div>
@@ -1763,12 +1793,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="flex items-center gap-4 w-full md:w-auto">
                 <div className="p-3 bg-brand-gold/10 rounded-2xl text-brand-gold shadow-sm"><Smartphone className="w-6 h-6" /></div>
                 <h3 className="text-xl font-black text-white tracking-tight">
-                  {monitoringSelectedDay ? `${monitoringSelectedDay} Kunlik Sotuvlar` : (
-                    monitoringTimeframe === 'today' ? "Bugungi operatorlar hisoboti" :
-                    monitoringTimeframe === 'week' ? "Haftalik operatorlar hisoboti" :
-                    monitoringTimeframe === 'month' ? "Oylik operatorlar hisoboti" :
-                    monitoringTimeframe === 'year' ? "Yillik operatorlar hisoboti" :
-                    "Operatorlar bo'yicha hisobot"
+                  {monitoringSelectedDay ? `${monitoringSelectedDay} ${t(language, 'daily_sales')}` : (
+                    monitoringTimeframe === 'today' ? t(language, 'today_operators_report') :
+                    monitoringTimeframe === 'week' ? t(language, 'weekly_operators_report') :
+                    monitoringTimeframe === 'month' ? t(language, 'monthly_operators_report') :
+                    monitoringTimeframe === 'year' ? t(language, 'yearly_operators_report') :
+                    t(language, 'operators_report')
                   )}
                 </h3>
               </div>
@@ -1793,7 +1823,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     onClick={() => setMonitoringSelectedDay(null)}
                     className="ml-2 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-xl text-[10px] font-bold text-white/60 hover:text-white uppercase tracking-wider transition-colors"
                   >
-                    Filtrni tozalash
+                    {t(language, 'reset_filter')}
                   </button>
                 )}
               </div>
@@ -1803,12 +1833,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <table className="w-full text-left min-w-[600px]">
                 <thead className="bg-brand-black text-[8px] sm:text-[9px] font-black text-white/30 uppercase tracking-widest">
                   <tr>
-                    <th className="px-4 sm:px-8 py-3 sm:py-4">Xodim</th>
+                    <th className="px-4 sm:px-8 py-3 sm:py-4">{t(language, 'employee')}</th>
                     <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Ucell</th>
                     <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Uztelecom</th>
                     <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Mobiuz</th>
                     <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Beeline</th>
-                    <th className="px-4 sm:px-8 py-3 sm:py-4 text-center text-brand-gold">Jami</th>
+                    <th className="px-4 sm:px-8 py-3 sm:py-4 text-center text-brand-gold">{t(language, 'total')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
@@ -1903,7 +1933,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       </div>
                       <div className="text-right">
                         <p className="text-lg font-black text-brand-gold">{total}</p>
-                        <p className="text-[8px] font-black text-brand-gold/50 uppercase tracking-widest">Jami</p>
+                        <p className="text-[8px] font-black text-brand-gold/50 uppercase tracking-widest">{t(language, 'total')}</p>
                       </div>
                     </div>
 
@@ -1970,7 +2000,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             <div className="flex items-center gap-4 w-full md:w-96">
               <div className="relative w-full md:w-96">
                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/30" />
-                <input type="text" placeholder="Xodimni qidirish..." className="w-full pl-10 pr-4 py-3 border border-white/10 rounded-2xl bg-brand-black focus:border-brand-gold transition outline-none text-white font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
+                <input type="text" placeholder={t(language, 'search_staff')} className="w-full pl-10 pr-4 py-3 border border-white/10 rounded-2xl bg-brand-black focus:border-brand-gold transition outline-none text-white font-bold" value={searchTerm} onChange={e => setSearchTerm(e.target.value)} />
               </div>
             </div>
           </div>
@@ -1982,10 +2012,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               return (
                 <div key={u.id} onClick={() => { setSelectedUserId(u.id); setChartTimeframe('week'); setSelectedDay(null); }} className={`p-6 rounded-[2.5rem] border shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all cursor-pointer group text-center relative overflow-hidden ${lateness?.isLate ? 'bg-red-500/10 border-red-500/20' : (lateness?.isEarly ? 'bg-brand-gold/10 border-brand-gold/20' : 'bg-brand-dark border-white/10')}`}>
                   {lateness?.isLate && (
-                    <div className="absolute top-4 right-4 bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-md animate-pulse z-10">LATE</div>
+                    <div className="absolute top-4 right-4 bg-red-600 text-white text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-md animate-pulse z-10">{t(language, 'late')}</div>
                   )}
                   {lateness?.isEarly && (
-                    <div className="absolute top-4 right-4 bg-brand-gold text-brand-black text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-md animate-pulse z-10">EARLY</div>
+                    <div className="absolute top-4 right-4 bg-brand-gold text-brand-black text-[8px] font-black px-2 py-1 rounded-full uppercase tracking-tighter shadow-md animate-pulse z-10">{t(language, 'early_arrival')}</div>
                   )}
                   <div className={`w-20 h-20 rounded-[1.8rem] flex items-center justify-center mx-auto mb-4 font-black text-2xl group-hover:scale-110 transition-transform ${lateness?.isLate ? 'bg-red-600 text-white shadow-lg shadow-red-200' : (lateness?.isEarly ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' : 'bg-brand-black text-brand-gold border border-white/10')} overflow-hidden`}>
                     {u.photo ? (
@@ -1995,7 +2025,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     )}
                   </div>
                   <h3 className="text-lg font-black text-white truncate px-2">{u.firstName} {u.lastName}</h3>
-                  <p className="text-[10px] font-black uppercase text-white/30 tracking-widest mt-1 truncate px-2">{u.role.replace('_', ' ')}</p>
+                  <p className="text-[10px] font-black uppercase text-white/30 tracking-widest mt-1 truncate px-2">{t(language, (u.role || '').toLowerCase() as any)}</p>
                   <div className="mt-4 pt-4 border-t border-white/5 flex justify-around">
                     <div className="text-center"><p className="text-[10px] font-black text-white/30 uppercase">{t(language, 'today')}</p><p className={`font-black ${lateness?.isLate ? 'text-red-600' : 'text-brand-gold'}`}>{getUserSalesCount(u.id, 'today')}</p></div>
                     <div className="text-center"><p className="text-[10px] font-black text-white/30 uppercase">{t(language, 'month')}</p><p className="font-black text-white">{getUserSalesCount(u.id, 'month')}</p></div>
@@ -2043,7 +2073,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
       )}
 
       {selectedUser && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[200] flex items-center justify-center animate-in fade-in duration-300">
           <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={() => { setSelectedUserId(null); setSelectedDay(null); }}></div>
           <div className="bg-brand-black w-full h-full md:h-[92vh] md:w-[92vw] md:rounded-[3rem] shadow-2xl relative z-10 overflow-hidden flex flex-col animate-in slide-in-from-bottom-12 border border-white/10">
             <div className="p-4 sm:p-6 md:p-8 border-b border-white/10 flex flex-col lg:flex-row lg:items-center justify-between bg-brand-dark sticky top-0 z-50 gap-6">
@@ -2060,7 +2090,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   <div className="min-w-0">
                     <h2 className="text-xl sm:text-2xl font-black text-white leading-tight truncate">{selectedUser.firstName} {selectedUser.lastName}</h2>
                     <div className="flex items-center gap-2 mt-1">
-                      <span className="bg-brand-gold text-brand-black text-[7px] sm:text-[8px] font-black px-2 py-0.5 sm:py-1 rounded-full uppercase tracking-widest shadow-sm shrink-0">{selectedUser.role.replace('_', ' ')}</span>
+                      <span className="bg-brand-gold text-brand-black text-[7px] sm:text-[8px] font-black px-2 py-0.5 sm:py-1 rounded-full uppercase tracking-widest shadow-sm shrink-0">{t(language, (selectedUser.role || '').toLowerCase() as any)}</span>
                       <span className="text-white/40 text-[9px] sm:text-[10px] font-bold truncate">● {selectedUser.phone?.startsWith('+') ? selectedUser.phone : '+' + selectedUser.phone}</span>
                     </div>
                   </div>
@@ -2082,7 +2112,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     }}
                     className="w-full sm:w-auto appearance-none bg-brand-gold/10 text-brand-gold pl-10 pr-10 py-3 rounded-2xl text-[10px] sm:text-[11px] font-black uppercase tracking-widest outline-none focus:border-brand-gold cursor-pointer hover:bg-brand-gold/20 active:scale-[0.98] transition-all border border-white/10 flex items-center gap-2 min-w-[160px] sm:min-w-[180px]"
                   >
-                    <span>{(typeof selectedUser.workingHours === 'string' ? selectedUser.workingHours : "Vaqtni tanlang").replace(/\s*(AM|PM)/gi, '')}</span>
+                    <span>{(typeof selectedUser.workingHours === 'string' ? selectedUser.workingHours : t(language, 'select_time')).replace(/\s*(AM|PM)/gi, '')}</span>
                   </button>
                   <Clock className="w-4 h-4 text-brand-gold absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
                   <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none transition-transform duration-200" style={{ transform: isTimeDropdownOpen ? 'translateY(-50%) rotate(180deg)' : 'translateY(-50%)' }}>
@@ -2100,7 +2130,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           `}</style>
                       <div className="space-y-4">
                         <div>
-                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">Ish boshlash</label>
+                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">{t(language, 'work_start_label')}</label>
                           <input
                             type="time"
                             value={tempStartTime}
@@ -2113,7 +2143,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           />
                         </div>
                         <div>
-                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">Ish tugatish</label>
+                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest block mb-1.5">{t(language, 'work_end_label')}</label>
                           <input
                             type="time"
                             value={tempEndTime}
@@ -2136,7 +2166,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           }}
                           className="w-full py-3 gold-gradient text-brand-black rounded-xl text-[10px] font-black uppercase tracking-widest hover:scale-[1.02] transition shadow-md shadow-brand-gold/20"
                         >
-                          Saqlash
+                          {t(language, 'save')}
                         </button>
                       </div>
                     </div>
@@ -2149,7 +2179,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   className="flex-1 sm:flex-none p-3 bg-brand-gold/10 text-brand-gold rounded-2xl hover:bg-brand-gold hover:text-brand-black transition-all shadow-sm flex items-center justify-center gap-2 text-[10px] font-black uppercase tracking-widest border border-brand-gold/20"
                 >
                   <Phone className="w-4 h-4" />
-                  Xabar yuborish
+                  {t(language, 'send_message_title')}
                 </button>
                 <button onClick={() => { setSelectedUserId(null); setSelectedDay(null); }} className="hidden sm:block p-3 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all shadow-sm border border-red-500/20"><X className="w-6 h-6" /></button>
               </div>
@@ -2199,7 +2229,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         <div className="flex flex-col gap-1">
                           <h3 className="text-lg font-black text-white flex items-center gap-2">
                             <BarChart2 className="w-5 h-5 text-brand-gold" />
-                            Sotuvlar Dinamikasi ({chartTitleLabel})
+                            {t(language, 'sales_dynamics')} ({chartTitleLabel})
                           </h3>
                           <div className="flex flex-wrap gap-2 pl-0 sm:pl-7">
                             {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => {
@@ -2257,7 +2287,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         )}
                       </div>
                     </div>
-                    <div className="h-72 border-none outline-none bg-brand-dark focus:outline-none focus:ring-0 chart-wrapper">
+                    <div className="h-72 min-h-[280px] border-none outline-none bg-brand-dark focus:outline-none focus:ring-0 chart-wrapper">
                       <ResponsiveContainer width="100%" height="100%" style={{ border: 'none', outline: 'none' }}>
                         <BarChart
                           data={currentChartData}
@@ -2296,7 +2326,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                         <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-brand-gold">
                                           <div className="flex items-center gap-2">
                                             <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
-                                            <span>Simkartalar:</span>
+                                            <span>{t(language, 'simcards_label')}:</span>
                                           </div>
                                           <span>{p.value}</span>
                                         </div>
@@ -2305,7 +2335,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                         <div key={p.dataKey} className="flex items-center justify-between gap-4 text-xs font-bold text-[#10B981]">
                                           <div className="flex items-center gap-2">
                                             <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
-                                            <span>Bonuslar:</span>
+                                            <span>{t(language, 'bonuses_label')}:</span>
                                           </div>
                                           <span>{p.value}</span>
                                         </div>
@@ -2325,11 +2355,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                               <div className="flex items-center justify-start gap-6 pl-2">
                                 <div className="flex items-center gap-2">
                                   <div className="w-2 h-2 rounded-full bg-brand-gold"></div>
-                                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Simkartalar: {userChartTotals.totalSimcards}</span>
+                                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">{t(language, 'simcards_label')}: {userChartTotals.totalSimcards}</span>
                                 </div>
                                 <div className="flex items-center gap-2">
                                   <div className="w-2 h-2 rounded-full bg-[#10B981]"></div>
-                                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">Bonuslar: {userChartTotals.totalBonuses}</span>
+                                  <span className="text-[10px] font-bold text-white/60 uppercase tracking-wider">{t(language, 'bonuses_label')}: {userChartTotals.totalBonuses}</span>
                                 </div>
                               </div>
                             )}
@@ -2375,15 +2405,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                               return `${selectedDay} ${t(language, 'daily_sales_title')}`;
                             }
                             if (chartTimeframe === 'year') return `${selectedYear} ${t(language, 'yearly_sales_title')}`;
-                            if (chartTimeframe === 'month') return `${chartTitleLabel} ${t(language, 'monthly_sales_title')}`;
-                            if (chartTimeframe === 'week') return `${chartTitleLabel} ${t(language, 'weekly_sales_title')}`;
+                            if (chartTimeframe === 'month') return t(language, 'monthly_sales_title');
+                            if (chartTimeframe === 'week') return t(language, 'weekly_sales_title');
                             if (chartTimeframe === 'day') return `${chartTargetDay} ${t(language, 'daily_sales_title')}`;
                             return `${today} ${t(language, 'daily_sales_title')}`;
                           })()}
                         </h3>
                       </div>
 
-                      <div className="flex flex-wrap justify-center items-center gap-2 w-full md:w-auto md:absolute md:left-1/2 md:-translate-x-1/2">
+                      <div className="flex flex-wrap justify-center items-center gap-2 w-full md:w-auto">
                         {(() => {
                           const companies = [
                             { name: 'Ucell', color: 'border-[#9b51e0]/20 text-[#9b51e0] bg-[#9b51e0]/10' },
@@ -2407,7 +2437,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       <div className="w-full md:w-auto flex justify-end">
                         {selectedDay && (
                           <div className="flex items-center gap-2 text-[9px] font-black text-brand-gold bg-brand-gold/10 px-3 py-1 rounded-full uppercase tracking-widest shadow-sm border border-brand-gold/20">
-                            <Calendar className="w-3 h-3" /> Tanlangan kun
+                            <Calendar className="w-3 h-3" /> {t(language, 'selected_day')}
                           </div>
                         )}
                       </div>
@@ -2417,12 +2447,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       <table className="w-full text-left min-w-[600px]">
                         <thead className="bg-brand-black text-[8px] sm:text-[9px] font-black text-white/30 uppercase tracking-widest">
                           <tr>
-                            <th className="px-4 sm:px-8 py-3 sm:py-4">Kompaniya</th>
-                            <th className="px-4 sm:px-8 py-3 sm:py-4">Tarif</th>
-                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Soni</th>
-                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">Bonus</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-left">{t(language, 'company')}</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-left">{t(language, 'tariff_label')}</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">{t(language, 'count_label')}</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">{t(language, 'bonus_label')}</th>
                             <th className="px-4 sm:px-8 py-3 sm:py-4 text-center">{t(language, 'total')}</th>
-                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-right">Vaqt</th>
+                            <th className="px-4 sm:px-8 py-3 sm:py-4 text-right">{t(language, 'time')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/5">
@@ -2435,7 +2465,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                       <div className="w-12 h-12 sm:w-16 sm:h-16 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                         <PackageSearch className="w-6 h-6 sm:w-10 sm:h-10" />
                                       </div>
-                                      <p className="text-xs sm:text-sm font-black text-white/20 italic">Bu davrda hech nima sotilmagan</p>
+                                      <p className="text-xs sm:text-sm font-black text-white/20 italic">{t(language, 'no_sales_period')}</p>
                                     </div>
                                   </td>
                                 </tr>
@@ -2500,7 +2530,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                               <div className="w-12 h-12 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                 <PackageSearch className="w-6 h-6" />
                               </div>
-                              <p className="text-xs font-black text-white/20 italic">Bu davrda hech nima sotilmagan</p>
+                              <p className="text-xs font-black text-white/20 italic">{t(language, 'no_sales_period')}</p>
                             </div>
                           );
                         }
@@ -2527,21 +2557,21 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                 </div>
 
                                 <div className="mb-4">
-                                  <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">Tarif</p>
+                                  <p className="text-[9px] font-black text-white/30 uppercase tracking-widest mb-1">{t(language, 'tariff_label')}</p>
                                   <p className="text-sm font-bold text-white">{sale.tariff}</p>
                                 </div>
 
                                 <div className="grid grid-cols-3 gap-2 bg-white/5 p-3 rounded-xl border border-white/5">
                                   <div className="text-center">
-                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Soni</p>
+                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">{t(language, 'count_label')}</p>
                                     <p className="text-sm font-black text-brand-gold">{sale.count}</p>
                                   </div>
                                   <div className="text-center border-l border-white/5">
-                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Bonus</p>
+                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">{t(language, 'bonus_label')}</p>
                                     <p className="text-sm font-black text-white/70">{sale.bonus}</p>
                                   </div>
                                   <div className="text-center border-l border-white/5">
-                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">Jami</p>
+                                    <p className="text-[8px] font-black text-white/30 uppercase tracking-widest mb-1">{t(language, 'total')}</p>
                                     <p className="text-sm font-black text-brand-gold">{sale.count + sale.bonus}</p>
                                   </div>
                                 </div>
@@ -2585,14 +2615,14 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                               if (chartTimeframe === 'year') {
                                 const d = new Date(selectedDay);
                                 const monthName = translations[language].month_names[d.getMonth()];
-                                return `${monthName} ${d.getFullYear()} Hisobotlari`;
+                                return `${monthName} ${d.getFullYear()} ${t(language, 'reports_suffix')}`;
                               }
-                              return `${selectedDay} Hisoboti`;
+                              return `${selectedDay} ${t(language, 'report_of')}`;
                             }
-                            if (chartTimeframe === 'year') return `${selectedYear} Yillik Hisobotlari`;
-                            if (chartTimeframe === 'month') return `${chartTitleLabel} Oylik Hisobotlari`;
-                            if (chartTimeframe === 'week') return `${chartTitleLabel} Haftalik Hisobotlari`;
-                            return `${today} Kunlik Hisoboti`;
+                            if (chartTimeframe === 'year') return `${selectedYear} ${t(language, 'yearly_reports')}`;
+                            if (chartTimeframe === 'month') return `${chartTitleLabel} ${t(language, 'monthly_reports')}`;
+                            if (chartTimeframe === 'week') return `${chartTitleLabel} ${t(language, 'weekly_reports')}`;
+                            return `${today} ${t(language, 'daily_report_title')}`;
                           })()}
                         </h3>
                       </div>
@@ -2605,7 +2635,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                               <div className="w-14 h-14 bg-white/5 rounded-full flex items-center justify-center text-white/10">
                                 <AlertTriangle className="w-8 h-8" />
                               </div>
-                              <p className="text-sm font-black text-white/20 italic">Bu davr uchun hisobotlar yuborilmagan</p>
+                              <p className="text-sm font-black text-white/20 italic">{t(language, 'no_reports_period')}</p>
                             </div>
                           );
                         }
@@ -2690,7 +2720,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 <div className="space-y-8">
                   <div className="bg-brand-dark rounded-[2rem] border border-white/10 overflow-hidden shadow-sm focus:outline-none">
                     <h3 className="p-5 text-[10px] font-black text-white/30 uppercase tracking-widest border-b border-white/5 flex items-center justify-between">
-                      <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-brand-gold" /> {selectedDay || today} DAVOMAT</div>
+                      <div className="flex items-center gap-2"><Clock className="w-4 h-4 text-brand-gold" /> {(() => {
+                        const d = getUzTime(selectedDay || today);
+                        const mName = translations[language].month_names[d.getMonth()];
+                        return `${d.getDate()}-${mName}`;
+                      })()} {t(language, 'attendance')}</div>
                       {(() => {
                         const date = selectedDay || today;
                         const ci = state.checkIns.find(c => c.userId === selectedUser.id && isDateMatch(c.timestamp, date));
@@ -2722,10 +2756,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                 <div className={`p-3 rounded-2xl shadow-md ${ci ? (lateness ? 'bg-red-600 text-white keep-white' : 'bg-green-600 text-white keep-white') : 'bg-red-600 text-white keep-white'}`}><LogInIcon className="w-5 h-5 keep-white" /></div>
                                 <div className="flex-1">
                                   <div className="flex justify-between items-start">
-                                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Kelish</p>
+                                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">{t(language, 'arrival')}</p>
                                     <div className="flex items-center gap-2">
                                       {lateness && (
-                                        <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">LATE</div>
+                                        <div className="bg-red-600 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">{t(language, 'late')}</div>
                                       )}
                                     </div>
                                   </div>
@@ -2766,7 +2800,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                   {lateness && editingTime?.type !== 'checkIn' && (
                                     <div className="mt-2 pt-2 border-t border-red-500/20 flex items-center gap-1.5 text-red-500 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
                                       <AlertTriangle className="w-3.5 h-3.5" />
-                                      <span>{lateness.durationStr} kechikish</span>
+                                      <span>{lateness.durationStr} {t(language, 'late_label').toLowerCase()}</span>
                                     </div>
                                   )}
                                 </div>
@@ -2777,10 +2811,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                 <div className={`p-3 rounded-2xl shadow-md ${co ? (earlyDeparture ? 'bg-orange-500 text-white keep-white' : 'bg-blue-500 text-white keep-white') : 'bg-white/10 text-white/40'}`}><LogOutIcon className={`w-5 h-5 ${co ? 'keep-white' : ''}`} /></div>
                                 <div className="flex-1">
                                   <div className="flex justify-between items-start">
-                                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">Ketish</p>
+                                    <p className="text-[9px] font-black text-white/30 uppercase tracking-widest">{t(language, 'departure')}</p>
                                     <div className="flex items-center gap-2">
                                       {earlyDeparture && (
-                                        <div className="bg-orange-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">EARLY</div>
+                                        <div className="bg-orange-500 text-white text-[8px] font-black px-2 py-0.5 rounded-full uppercase animate-pulse shadow-md ring-2 ring-white">{t(language, 'early_arrival')}</div>
                                       )}
                                     </div>
                                   </div>
@@ -2815,13 +2849,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                     </div>
                                   ) : (
                                     <p className={`text-2xl font-black leading-none mt-1 ${co ? (earlyDeparture ? 'text-orange-500' : 'text-white') : 'text-white/20'}`}>
-                                      {co ? formatUzTime(co.timestamp) : 'Hali ketmagan'}
+                                      {co ? formatUzTime(co.timestamp) : t(language, 'not_left_yet')}
                                     </p>
                                   )}
                                   {earlyDeparture && editingTime?.type !== 'checkOut' && (
                                     <div className="mt-2 pt-2 border-t border-orange-500/20 flex items-center gap-1.5 text-orange-500 font-black text-[10px] uppercase tracking-wider animate-in fade-in slide-in-from-top-2 duration-500">
                                       <AlertTriangle className="w-3.5 h-3.5" />
-                                      <span>{earlyDeparture.durationStr} erta ketish</span>
+                                      <span>{earlyDeparture.durationStr} {t(language, 'early_departure_label').toLowerCase()}</span>
                                     </div>
                                   )}
                                 </div>
@@ -2835,7 +2869,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
                   <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
                     <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <ImageIcon className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI FOTO' : 'OXIRGI FOTO'}
+                      <ImageIcon className="w-4 h-4 text-brand-gold" /> {selectedDay ? t(language, 'daily_photo') : t(language, 'last_photo')}
                     </h3>
                     {(() => {
                       const targetDate = selectedDay || today;
@@ -2853,8 +2887,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           </div>
                         </div>
                       ) : (
-                        <div className="h-40 flex items-center justify-center text-white/20 italic font-black text-xs uppercase tracking-widest bg-brand-black rounded-[1.5rem] border-2 border-dashed border-white/10">
-                          {selectedDay ? 'Bu kunda foto yo\'q' : 'Hali foto yo\'q'}
+                        <div className="h-40 flex items-center justify-center text-white/20 italic font-black text-xs uppercase tracking-widest bg-brand-black rounded-[1.5rem] border-2 border-dashed border-white/10 p-6 text-center">
+                          {selectedDay ? t(language, 'no_photo_this_day') : t(language, 'no_photo_yet')}
                         </div>
                       );
                     })()}
@@ -2862,7 +2896,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
 
                   <div className="bg-brand-dark rounded-[2rem] border border-white/10 p-6 shadow-sm">
                     <h3 className="text-[10px] font-black text-white/30 uppercase tracking-widest mb-4 flex items-center gap-2">
-                      <MapPin className="w-4 h-4 text-brand-gold" /> {selectedDay ? 'KUNDAGI JOYLAHUV' : 'OXIRGI JOYLAHUV'}
+                      <MapPin className="w-4 h-4 text-brand-gold" /> {selectedDay ? t(language, 'daily_location') : t(language, 'last_location')}
                     </h3>
                     {(() => {
                       const targetDate = selectedDay || today;
@@ -3042,12 +3076,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="absolute inset-0 bg-brand-gold/5 rounded-[2.5rem] scale-150 blur-xl opacity-30" />
               <Send className="w-10 h-10 relative z-10" />
            </div>
-           <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 text-center">Tez Orada</h2>
+           <h2 className="text-4xl font-black text-white uppercase tracking-tighter mb-4 text-center">{t(language, 'coming_soon')}</h2>
            <p className="text-white/40 font-bold uppercase tracking-[0.3em] text-[10px] text-center max-w-[280px] leading-loose">
-              Xabarlar bo'limi ustida ish olib borilmoqda. Tez orada foydalanishga topshiriladi.
+              {t(language, 'coming_soon_desc')}
            </p>
            <div className="mt-12 px-6 py-3 bg-white/5 rounded-2xl border border-white/10">
-              <span className="text-[10px] font-black text-brand-gold uppercase tracking-[0.2em]">In Development</span>
+              <span className="text-[10px] font-black text-brand-gold uppercase tracking-[0.2em]">{t(language, 'in_development')}</span>
            </div>
         </div>
       )}
@@ -3199,7 +3233,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             {showOfficeForm && (
               <div className="mb-10 p-6 sm:p-8 bg-brand-black rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 animate-in slide-in-from-top duration-300">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-base sm:text-lg font-black text-white">{targetMonth} uchun ofis va mobil ofis sotuvlarini kiritish</h3>
+                  <h3 className="text-base sm:text-lg font-black text-white">{targetMonth} {t(language, 'for_label')} {t(language, 'enter_sales_office')}</h3>
                   <button onClick={() => setShowOfficeForm(false)} className="p-2 text-white/30 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
@@ -3265,13 +3299,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     }}
                     className="w-full sm:flex-1 bg-brand-gold text-brand-black py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all"
                   >
-                    Saqlash
+                    {t(language, 'save')}
                   </button>
                   <button
                     onClick={() => setShowOfficeForm(false)}
                     className="w-full sm:w-auto px-10 py-4 sm:py-5 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 hover:text-white transition-all"
                   >
-                    Bekor qilish
+                    {t(language, 'cancel')}
                   </button>
                 </div>
               </div>
@@ -3280,13 +3314,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             {showTargetForm && (
               <div className="mb-10 p-6 sm:p-8 bg-brand-black rounded-[2rem] sm:rounded-[2.5rem] border border-white/10 animate-in slide-in-from-top duration-300">
                 <div className="flex items-center justify-between mb-6">
-                  <h3 className="text-base sm:text-lg font-black text-white">{targetMonth} uchun {t(language, 'enter_plan').toLowerCase()}</h3>
+                  <h3 className="text-base sm:text-lg font-black text-white">{targetMonth} {t(language, 'for_label')} {t(language, 'enter_plan_header_label')}</h3>
                   <button onClick={() => setShowTargetForm(false)} className="p-2 text-white/30 hover:text-red-500 transition"><X className="w-5 h-5" /></button>
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6 mb-6">
                   {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => (
                     <div key={company} className="space-y-1.5">
-                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">{company} (dona)</label>
+                      <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">{company} {t(language, 'pcs_with_brackets').toLowerCase()}</label>
                       <input
                         type="text"
                         inputMode="numeric"
@@ -3319,13 +3353,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     }}
                     className="w-full sm:flex-1 bg-brand-gold text-brand-black py-4 sm:py-5 rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all"
                   >
-                    Saqlash
+                    {t(language, 'save')}
                   </button>
                   <button
                     onClick={() => setShowTargetForm(false)}
                     className="w-full sm:w-auto px-10 py-4 sm:py-5 bg-white/5 border border-white/10 text-white/50 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 hover:text-white transition-all"
                   >
-                    Bekor qilish
+                    {t(language, 'cancel')}
                   </button>
                 </div>
               </div>
@@ -3393,7 +3427,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       }}
                       className="w-full bg-brand-gold text-brand-black p-3.5 sm:p-4 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all flex items-center justify-center gap-2"
                     >
-                      <Plus className="w-4 h-4" /> Qo'shish
+                      <Plus className="w-4 h-4" /> {t(language, 'add_button')}
                     </button>
                   </div>
                 </div>
@@ -3432,17 +3466,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     <Trash2 className="w-8 h-8 text-red-500" />
                   </div>
                   <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2">
-                    Tarifni o'chirish
+                    {t(language, 'delete_tariff_title')}
                   </h3>
                   <p className="text-white/60 text-sm mb-8">
-                    Haqiqatan ham <strong>{deletingTariff.tariff}</strong> tarifini o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.
+                    {t(language, 'really')} <strong>{deletingTariff.tariff}</strong> {t(language, 'delete_tariff_confirm')}
                   </p>
                   <div className="flex gap-4">
                     <button
                       onClick={() => setDeletingTariff(null)}
                       className="flex-1 py-4 rounded-2xl font-black text-white/60 uppercase tracking-widest hover:bg-white/5 transition border border-white/10"
                     >
-                      Bekor qilish
+                      {t(language, 'cancel')}
                     </button>
                     <button
                       onClick={() => {
@@ -3451,7 +3485,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       }}
                       className="flex-1 py-4 rounded-2xl font-black text-white uppercase tracking-widest bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/20"
                     >
-                      O'chirish
+                      {t(language, 'delete_button')}
                     </button>
                   </div>
                 </div>
@@ -3467,7 +3501,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         <Plus className="w-5 h-5 font-black" />
                       </div>
                       <div>
-                        <h3 className="text-xl font-black text-white tracking-tight uppercase">Simkarta berish</h3>
+                        <h3 className="text-xl font-black text-white tracking-tight uppercase">{t(language, 'give_simcards')}</h3>
                         <p className="text-[10px] font-black text-white/30 uppercase tracking-widest mt-0.5">{giveSimModalUser.nickname || giveSimModalUser.phone}</p>
                       </div>
                     </div>
@@ -3510,7 +3544,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         }}
                         className="flex-1 py-5 bg-brand-gold text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-2xl hover:scale-[1.02] active:scale-95 transition-all"
                       >
-                        Tasdiqlash
+                        {t(language, 'confirm')}
                       </button>
                     </div>
                   </div>
@@ -3530,7 +3564,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6 mb-8">
                     {['Ucell', 'Uztelecom', 'Mobiuz', 'Beeline'].map(company => (
                       <div key={company} className="space-y-2">
-                        <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">{company} (mavjud)</label>
+                        <label className="text-[10px] font-black text-white/30 uppercase tracking-widest pl-2">{company} ({t(language, 'available')})</label>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -3559,13 +3593,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       }}
                       className="w-full sm:flex-1 bg-brand-gold text-brand-black py-4 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all"
                     >
-                      Saqlash
+                      {t(language, 'save')}
                     </button>
                     <button
                       onClick={() => setInventoryModalUser(null)}
                       className="w-full sm:w-auto px-8 py-4 bg-white/5 border border-white/10 text-white/50 rounded-xl sm:rounded-2xl font-black uppercase tracking-widest text-[10px] sm:text-xs hover:bg-white/10 hover:text-white transition-all"
                     >
-                      Bekor qilish
+                      {t(language, 'cancel')}
                     </button>
                   </div>
                 </div>
@@ -3602,7 +3636,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       <div className="flex items-center justify-between">
                         <h3 className="font-black text-white text-base sm:text-lg">{company.name}</h3>
                         <span className={`text-[9px] sm:text-[10px] font-bold px-2 py-1 rounded-lg ${sales >= target && target > 0 ? 'text-green-400 bg-green-400/10' : 'text-brand-gold bg-brand-gold/10'}`}>
-                          {sales >= target && target > 0 ? 'Bajarildi' : t(language, 'in_progress')}
+                          {sales >= target && target > 0 ? t(language, 'completed') : t(language, 'in_progress')}
                         </span>
                       </div>
                       <div className="w-full bg-white/5 h-1.5 rounded-full overflow-hidden">
@@ -3681,7 +3715,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       ].map(provider => (
                         <div key={provider.name} className={`p-4 rounded-2xl ${provider.bg} border ${provider.border} group/item hover:scale-105 transition-transform`}>
                           <p className="text-[9px] font-black text-white/50 uppercase tracking-widest mb-2">{provider.name}</p>
-                          <p className={`text-2xl font-black ${provider.color}`}>{formatLargeNumber(counts[provider.name as keyof typeof counts])} <span className="text-[10px] text-white/30 font-bold">dona</span></p>
+                          <p className={`text-2xl font-black ${provider.color}`}>{formatLargeNumber(counts[provider.name as keyof typeof counts])} <span className="text-[10px] text-white/30 font-bold">{t(language, 'pcs')}</span></p>
                         </div>
                       ))}
                     </div>
@@ -3695,7 +3729,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         className="flex-1 py-4 bg-brand-gold text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        Simkarta berish
+                        {t(language, 'give_simcards')}
                       </button>
                       <button
                         onClick={(e) => {
@@ -3709,7 +3743,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           });
                         }}
                         className="p-4 bg-white/5 text-white/40 hover:text-white hover:bg-white/10 rounded-2xl border border-white/10 transition-all"
-                        title="Inventarni tahrirlash"
+                        title={t(language, 'edit_inventory')}
                       >
                         <Edit className="w-4 h-4" />
                       </button>
@@ -3761,7 +3795,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
         <div className="max-w-5xl mx-auto space-y-8 sm:space-y-10 animate-in fade-in px-2 sm:px-0">
           {/* Tasdiqlanmaganlar */}
           <div className="space-y-4 sm:space-y-6">
-            <h3 className="text-lg sm:text-xl font-black text-white px-2">Tasdiqlanmaganlar</h3>
+            <h3 className="text-lg sm:text-xl font-black text-white px-2">{t(language, 'unapproved_users')}</h3>
             {pendingUsers.length > 0 ? (
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                 {pendingUsers.map(u => (
@@ -3777,7 +3811,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       <div className="min-w-0">
                         <h4 className="text-base sm:text-lg font-black text-white leading-none mb-1 truncate">{u.firstName} {u.lastName}</h4>
                         <p className="text-[10px] sm:text-xs text-white/50 font-mono mt-1 flex items-center gap-2">
-                          Parol: {u.password || 'Kiritilmagan'}
+                          {t(language, 'password_label')}: {u.password || t(language, 'not_entered')}
                           <button
                             onClick={() => {
                               setPasswordFormUserId(u.id);
@@ -3797,7 +3831,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           setConfirmModal({
                             isOpen: true,
                             title: t(language, 'confirm_approve'),
-                            message: `${u.firstName} ${u.lastName} operator sifatida tizimga kiritiladi. Tasdiqlaysizmi?`,
+                            message: `${u.firstName} ${u.lastName} ${t(language, 'approve_confirm')}`,
                             type: 'success',
                             onConfirm: () => handleApproveUser(u.id)
                           });
@@ -3811,7 +3845,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           setConfirmModal({
                             isOpen: true,
                             title: t(language, 'confirm_delete'),
-                            message: `${u.firstName} ${u.lastName} so'rovi tizimdan butunlay o'chiriladi. Rad etasizmi?`,
+                            message: `${u.firstName} ${u.lastName} ${t(language, 'reject_confirm')}`,
                             type: 'danger',
                             onConfirm: () => {
                               userService.deleteUser(u.id).then(() => refreshData());
@@ -3828,13 +3862,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 ))}
               </div>
             ) : (
-              <div className="text-center py-16 sm:py-20 bg-brand-dark rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 italic text-white/30 font-bold uppercase tracking-widest text-[9px] sm:text-[10px] mx-2 sm:mx-0">Yangi so'rovlar mavjud emas</div>
+              <div className="text-center py-16 sm:py-20 bg-brand-dark rounded-[1.5rem] sm:rounded-[2rem] border border-white/10 italic text-white/30 font-bold uppercase tracking-widest text-[9px] sm:text-[10px] mx-2 sm:mx-0">{t(language, 'no_pending_requests')}</div>
             )}
           </div>
 
           {/* Tasdiqlanganlar */}
           <div className="space-y-4 sm:space-y-6">
-            <h3 className="text-lg sm:text-xl font-black text-white px-2">Tasdiqlanganlar</h3>
+            <h3 className="text-lg sm:text-xl font-black text-white px-2">{t(language, 'approved_users')}</h3>
             {approvedUsers.length > 0 ? (
               <>
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
@@ -3852,7 +3886,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         <h4 className="text-base sm:text-lg font-black text-white leading-none mb-1 truncate">{u.firstName} {u.lastName}</h4>
                         <p className="text-[10px] sm:text-xs text-white/30 font-bold truncate">@{u.nickname || (u.phone && (u.phone.startsWith('+') ? u.phone : `+${u.phone}`))}</p>
                         <div className="text-[10px] sm:text-xs text-white/50 font-mono mt-1 flex items-center gap-2 bg-white/5 px-2 py-1 rounded-lg w-fit">
-                          <span className="text-white/20 uppercase tracking-tighter mr-1 text-[9px]">Parol:</span> 
+                          <span className="text-white/20 uppercase tracking-tighter mr-1 text-[9px]">{t(language, 'password_label')}:</span> 
                           <span className="text-brand-gold font-bold">
                             {showPasswords[u.id] ? (u.password || '123456') : '••••••'}
                           </span>
@@ -3933,29 +3967,59 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             </div>
             <div>
               <h2 className="text-3xl font-black text-white tracking-tight uppercase">{t(language, 'settings')}</h2>
-              <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1">Tizimning umumiy sozlamalari</p>
+              <p className="text-white/40 text-[10px] font-black uppercase tracking-widest mt-1">{t(language, 'settings_subtitle')}</p>
             </div>
           </div>
 
           <div className="bg-brand-dark p-8 sm:p-12 rounded-[3.5rem] border border-white/10 shadow-2xl relative overflow-hidden group">
-            <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold/5 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-brand-gold/10 transition-all duration-700"></div>
+            <div className="absolute top-0 right-0 w-64 h-64 bg-brand-gold/5 rounded-full blur-3xl -mr-32 -mt-32 group-hover:bg-brand-gold/10 transition-all duration-700 pointer-events-none"></div>
             
             <div className="relative z-10 space-y-10">
               <div className="flex items-center justify-between">
                 <div className="space-y-2">
-                  <h3 className="text-xl font-black text-white uppercase tracking-tight">Reyting bo'limi ko'rinishi</h3>
+                  <h3 className="text-xl font-black text-white uppercase tracking-tight">{t(language, 'rating_section_visibility')}</h3>
                   <p className="text-sm text-white/40 font-medium leading-relaxed max-w-md">
-                    Operatorlar uchun reyting bo'limini yoqish yoki o'chirish. O'chirilganda operatorlarga "{t(language, 'rating_disabled_message')}" yozuvi ko'rinadi.
+                    {t(language, 'rating_section_desc_start')}"{t(language, 'rating_disabled_message')}"{t(language, 'rating_section_desc_end')}
                   </p>
                 </div>
                 
                 <button
-                  onClick={async () => {
-                    const newValue = !state.globalSettings?.rating_enabled;
-                    await settingsService.updateSettings({ rating_enabled: newValue });
-                    await refreshData();
+                  type="button"
+                  onClick={async (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const currentValue = state.globalSettings?.rating_enabled;
+                    const newValue = !currentValue;
+                    
+                    // Optimistic state update
+                    setState(prev => {
+                       return {
+                         ...prev,
+                         globalSettings: prev.globalSettings 
+                           ? { ...prev.globalSettings, rating_enabled: newValue } 
+                           : { id: 1, rating_enabled: newValue, updated_at: new Date().toISOString() }
+                       };
+                    });
+
+                    try {
+                      await settingsService.updateSettings({ rating_enabled: newValue });
+                      await refreshData();
+                    } catch (err) {
+                      console.error("Failed to update settings", err);
+                      showNotification(t(language, 'update_error'), 'error');
+                      // Revert state if failed
+                      setState(prev => ({
+                        ...prev,
+                        globalSettings: prev.globalSettings ? { ...prev.globalSettings, rating_enabled: !newValue } : prev.globalSettings
+                      }));
+                    }
                   }}
-                  className={`relative w-24 h-12 rounded-full transition-all duration-500 p-1.5 ${state.globalSettings?.rating_enabled ? 'bg-brand-gold shadow-lg shadow-brand-gold/30' : 'bg-white/5 border border-white/10'}`}
+                  className={`relative z-[9999] w-24 h-12 rounded-full transition-all duration-500 p-1.5 cursor-pointer flex items-center shadow-2xl ${
+                    state.globalSettings?.rating_enabled 
+                      ? 'bg-brand-gold ring-4 ring-brand-gold/20' 
+                      : 'bg-white/10 border border-white/20'
+                  }`}
+                  style={{ pointerEvents: 'auto' }}
                 >
                   <div className={`w-9 h-9 rounded-full transition-all duration-500 flex items-center justify-center shadow-xl ${state.globalSettings?.rating_enabled ? 'translate-x-12 bg-white' : 'translate-x-0 bg-white/10'}`}>
                     {state.globalSettings?.rating_enabled ? (
@@ -3970,11 +4034,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="pt-10 border-t border-white/5 flex items-center gap-4 text-white/20">
                 <AlertTriangle className="w-5 h-5 shrink-0" />
                 <p className="text-[10px] font-black uppercase tracking-widest leading-relaxed">
-                  Sozlamalar o'zgartirilishi bilanoq barcha operatorlar uchun real vaqt rejimida amal qiladi.
+                  {t(language, 'settings_realtime_hint')}
                 </p>
               </div>
             </div>
           </div>
+
         </div>
       )}
 
@@ -4041,7 +4106,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                               ))}
                             </div>
                           ) : (
-                            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">Baholanmagan</span>
+                            <span className="text-[8px] font-black text-white/20 uppercase tracking-widest">{t(language, 'not_rated')}</span>
                           )}
                           <ChevronRight className="w-3 h-3 sm:w-4 sm:h-4 text-white/10 group-hover:text-brand-gold transition-colors shrink-0" />
                         </div>
@@ -4156,8 +4221,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-700 pb-20">
           <div className="flex items-center justify-between mb-8">
             <div>
-              <h2 className="text-3xl font-black text-white tracking-tight uppercase">Savdo <span className="text-brand-gold">Paneli</span></h2>
-              <p className="text-white/40 text-xs font-bold uppercase tracking-widest mt-1">Operatorlar uchun foydali havolalarni boshqarish</p>
+              <h2 className="text-3xl font-black text-white tracking-tight uppercase">{t(language, 'sales_panel').split(' ')[0]} <span className="text-brand-gold">{t(language, 'sales_panel').split(' ')[1]}</span></h2>
+              <p className="text-white/40 text-xs font-bold uppercase tracking-widest mt-1">{t(language, 'manage_links_desc')}</p>
             </div>
             <button
               onClick={() => {
@@ -4168,7 +4233,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               className="px-6 py-3 gold-gradient text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center gap-2"
             >
               <Plus className="w-4 h-4" />
-              Yangi havola
+              {t(language, 'new_link')}
             </button>
           </div>
 
@@ -4240,7 +4305,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   <LayoutGrid className="w-10 h-10" />
                 </div>
                 <h3 className="text-xl font-black text-white/40 uppercase tracking-tight">Havolalar mavjud emas</h3>
-                <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-2">Yangi havola qo'shish uchun yuqoridagi tugmani bosing</p>
+                <p className="text-white/20 text-xs font-bold uppercase tracking-widest mt-2">{t(language, 'add_new_link_hint')}</p>
               </div>
             )}
           </div>
@@ -4253,17 +4318,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   <Trash2 className="w-8 h-8 text-red-500" />
                 </div>
                 <h3 className="text-xl font-black text-white uppercase tracking-tight mb-2">
-                  Havolani o'chirish
+                  {t(language, 'delete_link_title')}
                 </h3>
                 <p className="text-white/60 text-sm mb-8">
-                  Haqiqatan ham ushbu havolani o'chirmoqchimisiz? Bu amalni bekor qilib bo'lmaydi.
+                  {t(language, 'delete_link_confirm')}
                 </p>
                 <div className="flex gap-4">
                   <button
                     onClick={() => setDeletingSalesLinkId(null)}
                     className="flex-1 py-4 rounded-2xl font-black text-white/60 uppercase tracking-widest hover:bg-white/5 transition border border-white/10"
                   >
-                    Bekor qilish
+                    {t(language, 'cancel')}
                   </button>
                   <button
                     onClick={() => {
@@ -4272,7 +4337,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     }}
                     className="flex-1 py-4 rounded-2xl font-black text-white uppercase tracking-widest bg-red-500 hover:bg-red-600 transition shadow-lg shadow-red-500/20"
                   >
-                    O'chirish
+                    {t(language, 'delete_button')}
                   </button>
                 </div>
               </div>
@@ -4285,7 +4350,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="bg-brand-dark w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl relative z-10 border border-white/10 animate-in zoom-in-95 duration-300">
                 <div className="flex items-center justify-between mb-8">
                   <h3 className="text-xl font-black text-white uppercase tracking-tight">
-                    {editingSalesLinkId ? 'Havolani tahrirlash' : 'Yangi havola'}
+                    {editingSalesLinkId ? t(language, 'edit_link') : t(language, 'new_link')}
                   </h3>
                   <button onClick={() => setIsSalesLinkModalOpen(false)} className="p-2 hover:bg-white/5 rounded-full transition">
                     <X className="w-5 h-5 text-white/40" />
@@ -4306,7 +4371,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         ) : (
                           <>
                             <Globe className="w-8 h-8 text-white/20 mb-2 group-hover:text-brand-gold/50 transition-colors" />
-                            <span className="text-[10px] font-black text-white/30 uppercase tracking-widest group-hover:text-brand-gold/50 transition-colors">Rasm</span>
+                            <span className="text-[10px] font-black text-white/30 uppercase tracking-widest group-hover:text-brand-gold/50 transition-colors">{t(language, 'photo_label')}</span>
                           </>
                         )}
                       </div>
@@ -4348,12 +4413,12 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     return (
                       <>
                         <div className="space-y-1.5">
-                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">Nomi</label>
+                          <label className="text-[10px] font-black text-white/30 uppercase tracking-widest ml-4">{t(language, 'link_name_label')}</label>
                           <input
                             type="text"
                             value={salesLinkForm.name}
                             onChange={e => setSalesLinkForm({ ...salesLinkForm, name: e.target.value })}
-                            placeholder="Masalan: Ucell"
+                            placeholder={t(language, 'link_name_placeholder')}
                             className="w-full p-4 border border-white/10 rounded-2xl bg-brand-black focus:bg-brand-dark outline-none focus:border-brand-gold transition font-bold text-white shadow-inner"
                           />
                         </div>
@@ -4362,7 +4427,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           <div className="flex items-center justify-between ml-4 mr-2">
                             <label className="text-[10px] font-black text-white/30 uppercase tracking-widest">URL</label>
                             {!isUrlValid && salesLinkForm.url && (
-                              <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter animate-pulse">Xato URL kiritdingiz!</span>
+                              <span className="text-[8px] font-black text-red-500 uppercase tracking-tighter animate-pulse">{t(language, 'invalid_url')}</span>
                             )}
                           </div>
                           <input
@@ -4373,7 +4438,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                             className={`w-full p-4 rounded-2xl outline-none transition font-bold ${!isUrlValid && salesLinkForm.url ? 'border-2 !border-red-500 text-red-500 bg-red-500/10 focus:!border-red-500 focus:!ring-0' : 'border border-white/10 bg-brand-black focus:bg-brand-dark text-white focus:border-brand-gold'}`}
                           />
                           {!isUrlValid && salesLinkForm.url && (
-                             <p className="text-[7px] text-red-500/60 font-medium ml-4 uppercase">Masalan: https://google.com (protokol shart)</p>
+                             <p className="text-[7px] text-red-500/60 font-medium ml-4 uppercase">{t(language, 'url_hint')}</p>
                           )}
                         </div>
 
@@ -4391,10 +4456,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           {isSalesLinkSubmitting ? (
                             <div className="flex items-center justify-center gap-2">
                               <div className="w-4 h-4 border-2 border-brand-black/30 border-t-brand-black rounded-full animate-spin"></div>
-                              Saqlanmoqda...
+                              {t(language, 'saving')}
                             </div>
                           ) : (
-                            editingSalesLinkId ? 'Saqlash' : 'Qo\'shish'
+                            editingSalesLinkId ? t(language, 'save') : t(language, 'add_button')
                           )}
                         </button>
                       </>
@@ -4414,10 +4479,10 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="space-y-1 sm:space-y-2 lg:w-1/3">
                 <div className="flex items-center gap-2 text-brand-gold font-bold text-[9px] sm:text-[10px] uppercase tracking-[0.2em]">
                   <Trophy className="w-3 h-3 sm:w-4 sm:h-4" />
-                  <span>Reyting</span>
+                  <span>{t(language, 'rating_title')}</span>
                 </div>
                 <h2 className="text-2xl sm:text-4xl font-extrabold text-white tracking-tight">
-                  Operatorlar <span className="text-brand-gold">Reytingi</span>
+                  {t(language, 'operators')} <span className="text-brand-gold">{t(language, 'rating')}</span>
                 </h2>
               </div>
 
@@ -4426,17 +4491,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                 {/* Desktop Buttons */}
                 <div className="hidden xs:flex items-center gap-1 sm:gap-2 bg-brand-black p-1.5 rounded-xl sm:rounded-2xl border border-white/10 w-full sm:w-auto overflow-x-auto sm:overflow-visible custom-scrollbar">
                   {[
-                    { id: 'today', label: 'Bugun' },
-                    { id: 'week', label: 'Hafta' },
-                    { id: 'month', label: 'Oy' },
-                    { id: 'custom', label: 'Oraliq' }
-                  ].map(t => (
+                    { id: 'today', label: t(language, 'today_filter') },
+                    { id: 'week', label: t(language, 'week_filter') },
+                    { id: 'month', label: t(language, 'month_filter') },
+                    { id: 'custom', label: t(language, 'custom_filter') }
+                  ].map(item => (
                     <button
-                      key={t.id}
-                      onClick={() => setRatingTimeframe(t.id as any)}
-                      className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all flex-1 sm:flex-none shrink-0 ${ratingTimeframe === t.id ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
+                      key={item.id}
+                      onClick={() => setRatingTimeframe(item.id as any)}
+                      className={`px-4 sm:px-6 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-black uppercase tracking-widest whitespace-nowrap transition-all flex-1 sm:flex-none shrink-0 ${ratingTimeframe === item.id ? 'bg-brand-gold text-brand-black shadow-lg shadow-brand-gold/20' : 'text-white/40 hover:text-white hover:bg-white/5'}`}
                     >
-                      {t.label}
+                      {item.label}
                     </button>
                   ))}
                 </div>
@@ -4450,11 +4515,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     <span className="flex items-center gap-2">
                       <Trophy className="w-4 h-4 text-brand-gold" />
                       {[
-                        { id: 'today', label: 'Bugun' },
-                        { id: 'week', label: 'Hafta' },
-                        { id: 'month', label: 'Oy' },
-                        { id: 'custom', label: 'Oraliq' }
-                      ].find(t => t.id === ratingTimeframe)?.label}
+                        { id: 'today', label: t(language, 'today_filter') },
+                        { id: 'week', label: t(language, 'week_filter') },
+                        { id: 'month', label: t(language, 'month_filter') },
+                        { id: 'custom', label: t(language, 'custom_filter') }
+                      ].find(item => item.id === ratingTimeframe)?.label}
                     </span>
                     <ChevronDown className={`w-4 h-4 text-white/40 transition-transform ${isRatingTimeframeDropdownOpen ? 'rotate-180' : ''}`} />
                   </button>
@@ -4464,20 +4529,20 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       <div className="fixed inset-0 z-[100]" onClick={() => setIsRatingTimeframeDropdownOpen(false)}></div>
                       <div className="absolute top-full left-0 right-0 mt-2 bg-brand-dark border border-white/10 rounded-xl shadow-2xl z-[110] overflow-hidden animate-in fade-in slide-in-from-top-2">
                         {[
-                          { id: 'today', label: 'Bugun' },
-                          { id: 'week', label: 'Hafta' },
-                          { id: 'month', label: 'Oy' },
-                          { id: 'custom', label: 'Oraliq' }
-                        ].map(t => (
+                          { id: 'today', label: t(language, 'today_filter') },
+                          { id: 'week', label: t(language, 'week_filter') },
+                          { id: 'month', label: t(language, 'month_filter') },
+                          { id: 'custom', label: t(language, 'custom_filter') }
+                        ].map(item => (
                           <button
-                            key={t.id}
+                            key={item.id}
                             onClick={() => {
-                              setRatingTimeframe(t.id as any);
+                              setRatingTimeframe(item.id as any);
                               setIsRatingTimeframeDropdownOpen(false);
                             }}
-                            className={`w-full text-left px-5 py-3.5 text-xs font-bold uppercase tracking-widest transition-colors ${ratingTimeframe === t.id ? 'bg-brand-gold text-brand-black' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                            className={`w-full text-left px-5 py-3.5 text-xs font-bold uppercase tracking-widest transition-colors ${ratingTimeframe === item.id ? 'bg-brand-gold text-brand-black' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
                           >
-                            {t.label}
+                            {item.label}
                           </button>
                         ))}
                       </div>
@@ -4553,17 +4618,17 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     className="px-4 py-2.5 bg-brand-dark border border-white/10 rounded-xl text-white/60 hover:text-brand-gold hover:border-brand-gold/30 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-sm"
                   >
                     <Trophy className="w-3.5 h-3.5" />
-                    Saralash
+                    {t(language, 'sort_button')}
                   </button>
                 )}
 
                 <button
                   onClick={() => calculateAchievements && calculateAchievements(true)}
                   className="px-4 py-2.5 bg-brand-dark border border-white/10 rounded-xl text-white/60 hover:text-green-500 hover:border-green-500/30 transition-all flex items-center gap-2 text-[10px] font-black uppercase tracking-widest shadow-sm"
-                  title="O'tgan oy yutuqlarini qayta hisoblash"
+                  title={t(language, 'recalculate_prev_month')}
                 >
                   <RotateCcw className="w-3.5 h-3.5" />
-                  Qayta hisoblash
+                  {t(language, 'recalculate')}
                 </button>
               </div>
             </div>
@@ -4653,11 +4718,11 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                           <Trophy className={`w-4 h-4 sm:w-5 sm:h-5 ${leagueInfo.color}`} />
                           <span className={`text-xs sm:text-sm font-black uppercase tracking-[0.2em] ${leagueInfo.color}`}>{leagueInfo.title}</span>
                         </div>
-                        <span className="text-[8px] sm:text-[10px] font-black text-white/40 uppercase tracking-widest">{groupUsers.length} ta operator</span>
+                        <span className="text-[8px] sm:text-[10px] font-black text-white/40 uppercase tracking-widest">{groupUsers.length} {t(language, 'operator_count_suffix')}</span>
                       </div>
                       <div className="divide-y divide-white/5 flex-1 overflow-y-auto custom-scrollbar">
                         {groupUsers.length === 0 ? (
-                          <div className="p-6 sm:p-8 text-center text-white/20 text-[10px] sm:text-xs font-bold uppercase tracking-widest">Operatorlar yo'q</div>
+                          <div className="p-6 sm:p-8 text-center text-white/20 text-[10px] sm:text-xs font-bold uppercase tracking-widest">{t(language, 'no_operators')}</div>
                         ) : groupUsers.map((u, idx) => {
                           return (
                             <div key={u.id} className={`px-4 sm:px-6 py-4 sm:py-5 flex items-center justify-between hover:bg-white/5 transition-colors group`}>
@@ -4670,13 +4735,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                   <p className="font-bold text-white flex items-center gap-2 text-xs sm:text-sm truncate">
                                     <span className="truncate">{u.firstName} {u.lastName}</span>
                                   </p>
-                                  <p className="text-[8px] sm:text-[9px] font-medium text-white/40 truncate">{u.department || 'Bo\'limsiz'}</p>
+                                  <p className="text-[8px] sm:text-[9px] font-medium text-white/40 truncate">{u.department || t(language, 'without_department')}</p>
                                 </div>
                               </div>
                               <div className="flex items-center gap-4 shrink-0">
                                 <div className="text-right min-w-[40px] sm:min-w-[50px]">
                                   <p className="text-sm sm:text-base font-black text-white">{u.sales}</p>
-                                  <p className="text-[7px] sm:text-[8px] font-black text-white/40 uppercase tracking-widest">Sotuv</p>
+                                  <p className="text-[7px] sm:text-[8px] font-black text-white/40 uppercase tracking-widest">{t(language, 'sales_count')}</p>
                                 </div>
                               </div>
                             </div>
@@ -4696,7 +4761,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="bg-brand-black w-full max-w-5xl rounded-[1.5rem] sm:rounded-[2rem] shadow-2xl relative z-10 overflow-hidden flex flex-col border border-white/10 max-h-[95vh] sm:max-h-[90vh]">
                 <div className="p-4 sm:p-6 border-b border-white/10 flex items-center justify-between bg-brand-dark">
                   <h2 className="text-lg sm:text-xl font-black text-white flex items-center gap-2">
-                    <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-brand-gold" /> Operatorlarni Saralash
+                    <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-brand-gold" /> {t(language, 'sort_operators')}
                   </h2>
                   <button onClick={() => setIsLeagueModalOpen(false)} className="p-2 bg-red-500/10 text-red-500 rounded-full hover:bg-red-500 hover:text-white transition-all"><X className="w-4 h-4 sm:w-5 sm:h-5" /></button>
                 </div>
@@ -4805,7 +4870,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       }}
                       className="w-full p-3.5 sm:p-4 bg-brand-gold text-brand-black rounded-xl font-black uppercase tracking-widest text-[10px] sm:text-xs shadow-lg shadow-brand-gold/20 hover:bg-brand-gold/90 transition-all flex items-center justify-center gap-2 sm:col-span-2 md:col-span-1"
                     >
-                      <Plus className="w-3 h-3 sm:w-4 sm:h-4" /> Qo'shish
+                      <Plus className="w-3 h-3 sm:w-4 sm:h-4" /> {t(language, 'add_button')}
                     </button>
                   </div>
 
@@ -4842,7 +4907,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                                     setIsLeagueDeleteConfirmOpen(true);
                                   }}
                                   className="p-1.5 text-white/20 hover:text-red-500 hover:bg-red-500/10 rounded-lg transition-colors opacity-100 sm:opacity-0 sm:group-hover:opacity-100 shrink-0"
-                                  title="O'chirish"
+                                  title={t(language, 'delete_button')}
                                 >
                                   <X className="w-3 h-3 sm:w-4 sm:h-4" />
                                 </button>
@@ -4878,9 +4943,9 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     <div className="w-16 h-16 bg-red-500/10 rounded-full flex items-center justify-center mb-4 border border-red-500/20">
                       <AlertTriangle className="w-8 h-8 text-red-500" />
                     </div>
-                    <h3 className="text-lg font-black text-white uppercase tracking-widest mb-2">Ligadan o'chirish</h3>
+                    <h3 className="text-lg font-black text-white uppercase tracking-widest mb-2">{t(language, 'remove_from_league')}</h3>
                     <p className="text-white/40 text-xs sm:text-sm font-medium mb-8 leading-relaxed">
-                      Rostdan ham <span className="text-white font-bold">{leagueUserToDelete?.firstName} {leagueUserToDelete?.lastName}</span>ni ligadan olib tashlamoqchimisiz?
+                      {t(language, 'remove_league_confirm_start')} <span className="text-white font-bold">{leagueUserToDelete?.firstName} {leagueUserToDelete?.lastName}</span> {t(language, 'remove_league_confirm_end')}
                     </p>
 
                     <div className="grid grid-cols-2 gap-3 w-full">
@@ -4906,7 +4971,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                         }}
                         className="p-3.5 bg-red-500 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-600 transition-all shadow-lg shadow-red-500/20"
                       >
-                        Ha, o'chirish
+                        {t(language, 'yes_delete')}
                       </button>
                     </div>
                   </div>
@@ -4924,8 +4989,8 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
             <div className="bg-brand-dark w-full sm:w-[95vw] h-[100vh] sm:h-[95vh] sm:rounded-[3rem] border-0 sm:border border-white/10 shadow-2xl overflow-hidden animate-in zoom-in-95 duration-300 flex flex-col">
               <div className="p-4 sm:p-8 border-b border-white/5 flex items-center justify-between bg-gradient-to-br from-brand-gold/10 to-transparent shrink-0">
                 <div>
-                  <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight">Ish nuqtasini kiritish</h3>
-                  <p className="text-[8px] sm:text-[10px] font-bold text-white/40 uppercase tracking-widest mt-1">Operator uchun xaritadan nuqta belgilang</p>
+                  <h3 className="text-lg sm:text-xl font-black text-white uppercase tracking-tight">{t(language, 'enter_work_point')}</h3>
+                  <p className="text-[8px] sm:text-[10px] font-bold text-white/40 uppercase tracking-widest mt-1">{t(language, 'select_point_on_map')}</p>
                 </div>
                 <button
                   onClick={() => {
@@ -4941,15 +5006,18 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
               <div className="p-4 sm:p-8 gap-4 sm:gap-6 overflow-y-auto custom-scrollbar flex-1 flex flex-col">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4 sm:gap-6 shrink-0">
                   <div className="space-y-1.5 sm:space-y-2 relative">
-                    <label className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Operatorni tanlang</label>
+                    <label className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">{t(language, 'select_operator')}</label>
                     <button
-                      onClick={() => setIsWorkPointOperatorDropdownOpen(!isWorkPointOperatorDropdownOpen)}
+                      onClick={() => {
+                        setIsWorkPointOperatorDropdownOpen(!isWorkPointOperatorDropdownOpen);
+                        setIsWorkPointDepartmentDropdownOpen(false);
+                      }}
                       className={`w-full p-3.5 sm:p-4 bg-brand-black border ${isWorkPointOperatorDropdownOpen ? 'border-brand-gold ring-1 ring-brand-gold/50' : 'border-white/10'} rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-white flex items-center justify-between transition-all hover:border-white/20`}
                     >
                       <span className={workPointForm.userId ? 'text-white truncate' : 'text-white/30 truncate'}>
                         {workPointForm.userId
                           ? operators.find(op => op.id === workPointForm.userId)?.firstName + ' ' + operators.find(op => op.id === workPointForm.userId)?.lastName
-                          : 'Operatorni tanlang...'}
+                          : t(language, 'select_operator') + '...'}
                       </span>
                       <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-white/30 transition-transform ${isWorkPointOperatorDropdownOpen ? 'rotate-180' : ''} shrink-0`} />
                     </button>
@@ -4994,17 +5062,42 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     />
                   </div>
 
-                  <div className="space-y-1.5 sm:space-y-2">
-                    <label className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">Bo'limni tanlang</label>
-                    <select
-                      value={workPointForm.workType}
-                      onChange={(e) => setWorkPointForm(prev => ({ ...prev, workType: e.target.value as 'office' | 'mobile' | 'desk' }))}
-                      className="w-full p-3.5 sm:p-4 bg-brand-black border border-white/10 rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-white focus:border-brand-gold focus:ring-1 focus:ring-brand-gold/50 transition-all outline-none appearance-none"
+                  <div className="space-y-1.5 sm:space-y-2 relative">
+                    <label className="text-[9px] sm:text-[10px] font-black text-white/30 uppercase tracking-widest ml-1">{t(language, 'select_department')}</label>
+                    <button
+                      onClick={() => {
+                        setIsWorkPointDepartmentDropdownOpen(!isWorkPointDepartmentDropdownOpen);
+                        setIsWorkPointOperatorDropdownOpen(false);
+                      }}
+                      className={`w-full p-3.5 sm:p-4 bg-brand-black border ${isWorkPointDepartmentDropdownOpen ? 'border-brand-gold ring-1 ring-brand-gold/50' : 'border-white/10'} rounded-xl sm:rounded-2xl text-xs sm:text-sm font-bold text-white flex items-center justify-between transition-all hover:border-white/20`}
                     >
-                      <option value="office">Ofis</option>
-                      <option value="mobile">Mobil ofis</option>
-                      <option value="desk">Stolda</option>
-                    </select>
+                      <span className="text-white truncate">
+                        {workPointForm.workType === 'office' ? t(language, 'office_label') : workPointForm.workType === 'mobile' ? t(language, 'mobile_office_label') : t(language, 'desk')}
+                      </span>
+                      <ChevronDown className={`w-3 h-3 sm:w-4 sm:h-4 text-white/30 transition-transform ${isWorkPointDepartmentDropdownOpen ? 'rotate-180' : ''} shrink-0`} />
+                    </button>
+
+                    {isWorkPointDepartmentDropdownOpen && (
+                      <div className="absolute top-full left-0 right-0 mt-2 bg-brand-black border border-white/10 rounded-xl sm:rounded-2xl shadow-2xl z-[110] overflow-hidden animate-in slide-in-from-top-2 duration-200">
+                        {[
+                          { id: 'office', name: t(language, 'office_label') },
+                          { id: 'mobile', name: t(language, 'mobile_office_label') },
+                          { id: 'desk', name: t(language, 'desk') }
+                        ].map(dept => (
+                          <button
+                            key={dept.id}
+                            onClick={() => {
+                              setWorkPointForm(prev => ({ ...prev, workType: dept.id as any }));
+                              setIsWorkPointDepartmentDropdownOpen(false);
+                            }}
+                            className={`w-full p-3 sm:p-4 text-left text-xs sm:text-sm font-bold transition-colors flex items-center justify-between ${workPointForm.workType === dept.id ? 'bg-brand-gold/10 text-brand-gold' : 'text-white/60 hover:bg-white/5 hover:text-white'}`}
+                          >
+                            <span>{dept.name}</span>
+                            {workPointForm.workType === dept.id && <Check className="w-3 h-3 sm:w-4 sm:h-4 shrink-0" />}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -5017,12 +5110,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       className="absolute inset-0 h-full w-full m-0 rounded-none border-none"
                       workType={workPointForm.workType}
                       radius={workPointForm.radius}
+                      language={language}
                     />
                   </div>
                   {workPointForm.location && (
-                    <p className="text-[8px] sm:text-[10px] font-bold text-brand-gold uppercase tracking-widest mt-1 sm:mt-2">
-                      Tanlangan: {workPointForm.location.lat.toFixed(6)}, {workPointForm.location.lng.toFixed(6)}
-                    </p>
+                    <div className="px-4 py-2 bg-brand-black/50 backdrop-blur-sm border-t border-white/5 text-[10px] font-black text-brand-gold uppercase tracking-widest flex items-center gap-4">
+                      {t(language, 'selected_day')}: {workPointForm.location.lat.toFixed(6)}, {workPointForm.location.lng.toFixed(6)}
+                    </div>
                   )}
                 </div>
 
@@ -5044,7 +5138,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                   }}
                   className="w-full py-4 sm:py-5 gold-gradient text-brand-black rounded-xl sm:rounded-[1.5rem] text-xs sm:text-sm font-black uppercase tracking-widest hover:scale-[1.02] active:scale-95 transition shadow-xl shadow-brand-gold/20 flex items-center justify-center gap-2 shrink-0"
                 >
-                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" /> Saqlash
+                  <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" /> {t(language, 'save')}
                 </button>
               </div>
             </div>
@@ -5218,15 +5312,15 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     <Edit className="w-5 h-5" />
                   </div>
                   <div>
-                    <h3 className="text-xl font-black text-white">Parolni yangilash</h3>
-                    <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest mt-0.5">Yangi parol kiritish</p>
+                    <h3 className="text-xl font-black text-white">{t(language, 'update_password')}</h3>
+                    <p className="text-[10px] text-white/30 font-bold uppercase tracking-widest mt-0.5">{t(language, 'enter_new_password')}</p>
                   </div>
                 </div>
 
                 <div className="space-y-4">
                   <input
                     type="text"
-                    placeholder="Yangi parol..."
+                    placeholder={t(language, 'new_password')}
                     className="w-full p-4 bg-brand-black border border-white/10 rounded-2xl text-white outline-none focus:border-brand-gold transition-all"
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
@@ -5237,13 +5331,13 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                       onClick={() => setIsPasswordModalOpen(false)}
                       className="flex-1 py-4 bg-white/5 text-white/60 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all"
                     >
-                      Bekor qilish
+                      {t(language, 'cancel')}
                     </button>
                     <button
                       onClick={handlePasswordChange}
                       className="flex-1 py-4 bg-brand-gold text-brand-black rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-brand-gold/20 hover:scale-[1.02] active:scale-95 transition-all"
                     >
-                      Saqlash
+                      {t(language, 'save')}
                     </button>
                   </div>
                 </div>
@@ -5287,7 +5381,7 @@ const ManagerPanel: React.FC<ManagerPanelProps> = ({
                     onClick={() => setConfirmModal(prev => ({ ...prev, isOpen: false }))}
                     className="flex-1 py-4 bg-white/5 text-white/60 rounded-2xl font-black uppercase tracking-widest text-[10px] hover:bg-white/10 transition-all"
                   >
-                    Bekor qilish
+                    {t(language, 'cancel')}
                   </button>
                   <button
                     onClick={() => {

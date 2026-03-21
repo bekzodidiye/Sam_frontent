@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { MapContainer, TileLayer, Marker, Circle, useMapEvents, useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { Navigation } from 'lucide-react';
+import { t, Language } from '../translations';
 
 // Fix for default marker icon in Leaflet
 const DefaultIcon = L.icon({
@@ -13,6 +14,7 @@ const DefaultIcon = L.icon({
 
 L.Marker.prototype.options.icon = DefaultIcon;
 
+
 interface MapPickerProps {
   lat: number;
   lng: number;
@@ -20,6 +22,7 @@ interface MapPickerProps {
   className?: string;
   workType?: 'office' | 'mobile' | 'desk';
   radius?: number;
+  language: Language;
 }
 
 const LocationMarker: React.FC<{ lat: number; lng: number; onChange: (lat: number, lng: number) => void; workType?: 'office' | 'mobile' | 'desk'; radius?: number }> = ({ lat, lng, onChange, workType, radius }) => {
@@ -67,7 +70,7 @@ const LocationMarker: React.FC<{ lat: number; lng: number; onChange: (lat: numbe
   ) : null;
 };
 
-const MapPicker: React.FC<MapPickerProps> = ({ lat, lng, onChange, className, workType, radius }) => {
+const MapPicker: React.FC<MapPickerProps> = ({ lat, lng, onChange, className, workType, radius, language }) => {
   const center: [number, number] = lat && lng ? [lat, lng] : [41.2995, 69.2401]; // Default to Tashkent
   const [mapInstance, setMapInstance] = useState<L.Map | null>(null);
 
@@ -83,11 +86,8 @@ const MapPicker: React.FC<MapPickerProps> = ({ lat, lng, onChange, className, wo
         },
         (error) => {
           console.error("Error getting location:", error);
-          console.warn("Joylashuvni aniqlab bo'lmadi. Iltimos, brauzer sozlamalaridan ruxsat bering.");
         }
       );
-    } else {
-      console.warn("Sizning brauzeringiz joylashuvni aniqlashni qo'llab-quvvatlamaydi.");
     }
   };
 
@@ -96,10 +96,10 @@ const MapPicker: React.FC<MapPickerProps> = ({ lat, lng, onChange, className, wo
       <button
         onClick={(e) => { e.preventDefault(); goToCurrentLocation(); }}
         className="absolute top-4 right-4 z-[400] bg-white text-brand-black p-3 rounded-xl shadow-lg hover:bg-gray-100 transition-colors flex items-center gap-2 font-bold text-sm"
-        title="Hozirgi turgan joylashuvga borish"
+        title={t(language, 'my_location')}
       >
         <Navigation className="w-5 h-5 text-brand-gold" />
-        <span className="hidden sm:inline">Joylashuvim</span>
+        <span className="hidden sm:inline">{t(language, 'my_location')}</span>
       </button>
       <MapContainer 
         center={center} 
